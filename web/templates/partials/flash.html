@@ -1,0 +1,25 @@
+{{define "flash"}}
+{{if .Flash}}<div class="alert alert-success" role="status">{{.Flash}}</div>{{end}}
+{{if .FlashError}}<div class="alert alert-error" role="alert">{{.FlashError}}</div>{{end}}
+{{end}}
+
+{{define "errors"}}
+{{if .}}
+<div class="alert alert-error" role="alert">
+  <strong>Формата не е изпратена:</strong>
+  <ul>
+    {{range .}}<li>{{.}}</li>{{end}}
+  </ul>
+</div>
+{{end}}
+{{end}}
+
+{{define "warnings"}}
+{{if .}}
+<div class="alert alert-warning" role="status">
+  <ul>
+    {{range .}}<li>{{.}}</li>{{end}}
+  </ul>
+</div>
+{{end}}
+{{end}}

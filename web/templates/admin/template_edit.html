@@ -1,0 +1,108 @@
+{{define "content"}}
+<div class="page-head">
+  <div>
+    <h1>{{.Def.Label}}</h1>
+    <p class="muted">{{.Def.Description}}</p>
+  </div>
+  <a class="btn" href="/admin/settings/templates">← Всички шаблони</a>
+</div>
+
+{{template "errors" .Errors}}
+{{template "warnings" .Warnings}}
+
+<div class="card" x-data="disclosure">
+  <div class="form-actions" style="margin:0 0 .3rem">
+    <button type="button" class="btn-icon" @click="toggle"
+            :aria-expanded="expanded" aria-controls="placeholder-panel"
+            title="Налични променливи">ⓘ</button>
+    <strong>Налични променливи за този шаблон</strong>
+  </div>
+
+  <div class="info-panel" id="placeholder-panel" x-show="open">
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th scope="col">Променлива</th>
+            <th scope="col">Описание</th>
+            <th scope="col">Пример</th>
+          </tr>
+        </thead>
+        <tbody>
+          {{range .Placeholders}}
+          <tr>
+            <td class="mono nowrap">{{.Token}}</td>
+            <td>{{.Description}}</td>
+            <td class="small muted">{{.Example}}</td>
+          </tr>
+          {{end}}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <form method="post" action="/admin/settings/templates/{{.Def.Key}}" id="template-form">
+    <input type="hidden" name="csrf_token" value="{{.CSRF}}">
+
+    <div class="field">
+      <label for="subject">Тема</label>
+      <input type="text" id="subject" name="subject" value="{{.Template.Subject}}" required>
+    </div>
+
+    <div class="field">
+      <label for="body_html">Съдържание (HTML)</label>
+      <textarea id="body_html" name="body_html" class="code" rows="18" required>{{.Template.BodyHTML}}</textarea>
+      <p class="hint">
+        Текстовата версия на имейла се генерира автоматично от това съдържание.
+      </p>
+    </div>
+
+    <div class="form-actions">
+      <button type="submit" class="btn btn-primary">Запази</button>
+      <button type="button" class="btn"
+              hx-post="/admin/settings/templates/{{.Def.Key}}/preview"
+              hx-include="#template-form"
+              hx-target="#template-preview"
+              hx-swap="outerHTML">Преглед</button>
+    </div>
+  </form>
+</div>
+
+{{if .IsCustom}}
+<div class="card">
+  <h2 class="card-title">Връщане към стойността по подразбиране</h2>
+  <form method="post" action="/admin/settings/templates/{{.Def.Key}}/restore"
+        x-data="confirmForm"
+        data-confirm="Шаблонът ще бъде върнат към стойността по подразбиране. Продължавате ли?"
+        @submit="confirm">
+    <input type="hidden" name="csrf_token" value="{{.CSRF}}">
+    <button type="submit" class="btn btn-danger">Върни по подразбиране</button>
+  </form>
+</div>
+{{end}}
+
+{{template "template_preview" dict "Subject" "" "BodyHTML" "" "BodyText" ""}}
+{{end}}
+
+{{define "template_preview"}}
+<div class="card" id="template-preview">
+  <h2 class="card-title">Преглед с примерни данни</h2>
+  {{if .Subject}}
+    <dl class="details">
+      <dt>Тема</dt><dd>{{.Subject}}</dd>
+    </dl>
+
+    <h3>HTML съдържание</h3>
+    {{/* The rendered body is shown as escaped source rather than injected as
+         live markup, so an edited template cannot script the admin panel. */}}
+    <div class="code-block">{{.BodyHTML}}</div>
+
+    <h3>Текстова версия</h3>
+    <div class="code-block">{{.BodyText}}</div>
+  {{else}}
+    <p class="empty">Натиснете „Преглед“, за да видите шаблона с примерни данни.</p>
+  {{end}}
+</div>
+{{end}}

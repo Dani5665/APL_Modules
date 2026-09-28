@@ -1,0 +1,99 @@
+{{define "content"}}
+<div class="page-head">
+  <h1>Магазини</h1>
+</div>
+
+{{template "errors" .Errors}}
+
+<div class="alert alert-info" role="status">
+  <strong>Външна стойност</strong> е стойността на магазина така, както се среща
+  във външната база данни. Съответствието се поддържа ръчно — няма автоматична
+  синхронизация.
+</div>
+
+<div class="card">
+  <h2 class="card-title">Съществуващи магазини</h2>
+  {{if .Stores}}
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th scope="col">Име</th>
+          <th scope="col">Външна стойност</th>
+          <th scope="col">Активен</th>
+          <th scope="col" class="numeric">Потребители</th>
+          <th scope="col">Действия</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{range .Stores}}
+        <tr>
+          <td>
+            <label class="sr-only" for="name-{{.ID}}">Име на магазин</label>
+            <input type="text" id="name-{{.ID}}" name="name" value="{{.Name}}"
+                   form="store-{{.ID}}" required>
+          </td>
+          <td>
+            <label class="sr-only" for="ext-{{.ID}}">Външна стойност</label>
+            <input type="text" id="ext-{{.ID}}" name="external_value" value="{{.ExternalValue}}"
+                   form="store-{{.ID}}">
+          </td>
+          <td>
+            <div class="check">
+              <input type="checkbox" id="active-{{.ID}}" name="active" value="1"
+                     form="store-{{.ID}}" {{if .Active}}checked{{end}}>
+              <label for="active-{{.ID}}">Активен</label>
+            </div>
+          </td>
+          <td class="numeric">{{.UserCount}}</td>
+          <td class="nowrap">
+            <button type="submit" class="btn btn-small btn-primary" form="store-{{.ID}}">Запази</button>
+            {{if eq .UserCount 0}}
+            <form method="post" action="/admin/stores/{{.ID}}/delete" class="inline-form"
+                  x-data="confirmForm" data-confirm="Магазинът ще бъде изтрит. Продължавате ли?" @submit="confirm">
+              <input type="hidden" name="csrf_token" value="{{$.CSRF}}">
+              <button type="submit" class="btn btn-small btn-danger">Изтрий</button>
+            </form>
+            {{else}}
+            <span class="hint">Използва се — деактивирайте вместо изтриване.</span>
+            {{end}}
+          </td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+  </div>
+
+  {{/* A form element is not valid inside a table row, so each row's form
+       lives here and its inputs join it through the form attribute. */}}
+  {{range .Stores}}
+  <form method="post" action="/admin/stores/{{.ID}}" id="store-{{.ID}}" hidden>
+    <input type="hidden" name="csrf_token" value="{{$.CSRF}}">
+  </form>
+  {{end}}
+  {{else}}
+  <p class="empty">Няма създадени магазини.</p>
+  {{end}}
+</div>
+
+<div class="card">
+  <h2 class="card-title">Нов магазин</h2>
+  <form method="post" action="/admin/stores">
+    <input type="hidden" name="csrf_token" value="{{.CSRF}}">
+    <div class="form-row">
+      <div class="field">
+        <label for="new_name">Име</label>
+        <input type="text" id="new_name" name="name" placeholder="Магазин София" required>
+      </div>
+      <div class="field">
+        <label for="new_external">Външна стойност</label>
+        <input type="text" id="new_external" name="external_value" placeholder="SOFIA">
+        <p class="hint">Ако е празно, се използва името.</p>
+      </div>
+    </div>
+    <div class="form-actions">
+      <button type="submit" class="btn btn-primary">Създай</button>
+    </div>
+  </form>
+</div>
+{{end}}

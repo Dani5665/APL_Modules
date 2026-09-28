@@ -1,0 +1,61 @@
+{{define "layout_admin"}}<!DOCTYPE html>
+<html lang="bg">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{.Title}} — Админ панел</title>
+  <link rel="stylesheet" href="/static/app.css?v={{.AssetVersion}}">
+  <link rel="icon" href="/static/favicon.svg?v={{.AssetVersion}}" type="image/svg+xml">
+  <script src="/static/htmx.min.js?v={{.AssetVersion}}" defer></script>
+  <script src="/static/app.js?v={{.AssetVersion}}" defer></script>
+  <script src="/static/alpine.min.js?v={{.AssetVersion}}" defer></script>
+</head>
+<body hx-headers='{"X-CSRF-Token": "{{.CSRF}}"}'>
+  <a class="skip-link" href="#main">Към съдържанието</a>
+
+  <header class="site-header">
+    <div class="bar">
+      <a class="brand" href="/admin">Админ<span> панел</span></a>
+      <nav class="site-nav" aria-label="Основна навигация">
+        <a href="/admin/requests" {{if eq .ActivePage "requests"}}aria-current="page"{{end}}>
+          Запитвания
+          {{if gt .PendingRequests 0}}<span class="nav-badge" aria-label="чакащи запитвания">{{.PendingRequests}}</span>{{end}}
+        </a>
+        <a href="/admin/activations" {{if eq .ActivePage "activations"}}aria-current="page"{{end}}>Активации</a>
+        <a href="/admin/users" {{if eq .ActivePage "users"}}aria-current="page"{{end}}>Потребители</a>
+        <a href="/admin/admins" {{if eq .ActivePage "admins"}}aria-current="page"{{end}}>Администратори</a>
+        <a href="/admin/stores" {{if eq .ActivePage "stores"}}aria-current="page"{{end}}>Магазини</a>
+        <a href="/admin/settings/smtp" {{if eq .ActivePage "smtp"}}aria-current="page"{{end}}>SMTP</a>
+        <a href="/admin/settings/templates" {{if eq .ActivePage "templates"}}aria-current="page"{{end}}>Шаблони</a>
+        <a href="/admin/settings/schedule" {{if eq .ActivePage "schedule"}}aria-current="page"{{end}}>График</a>
+        <a href="/admin/outbox" {{if eq .ActivePage "outbox"}}aria-current="page"{{end}}>
+          Имейли
+          {{if gt .FailedEmails 0}}<span class="nav-badge nav-badge-warn" aria-label="неуспешни имейли">{{.FailedEmails}}</span>{{end}}
+        </a>
+        <a href="/admin/audit" {{if eq .ActivePage "audit"}}aria-current="page"{{end}}>Одит</a>
+      </nav>
+      {{if .Admin}}
+      <div class="header-user">
+        <span>{{.Admin.Email}}</span>
+        <a href="/admin/password" class="btn btn-small">Смяна на парола</a>
+        <form method="post" action="/admin/logout" class="inline-form">
+          <input type="hidden" name="csrf_token" value="{{.CSRF}}">
+          <button type="submit" class="btn btn-small">Изход</button>
+        </form>
+      </div>
+      {{end}}
+    </div>
+  </header>
+
+  <main id="main">
+    {{if .MockMode}}
+    <div class="alert alert-warning" role="status">
+      Приложението работи с <strong>примерни данни</strong> за външната база
+      (<code>EXTERNAL_DB_MODE=mock</code>). Данните за клиенти не са реални.
+    </div>
+    {{end}}
+    {{template "flash" .}}
+    {{template "content" .}}
+  </main>
+</body>
+</html>{{end}}

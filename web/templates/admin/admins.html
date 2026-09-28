@@ -1,0 +1,95 @@
+{{define "content"}}
+<div class="page-head">
+  <h1>Администратори</h1>
+</div>
+
+{{template "errors" .Errors}}
+
+<div class="card">
+  <h2 class="card-title">Съществуващи администратори</h2>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th scope="col">Имейл</th>
+          <th scope="col">2FA</th>
+          <th scope="col">Състояние</th>
+          <th scope="col">Създаден</th>
+          <th scope="col">Действия</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{range .Admins}}
+        <tr>
+          <td>
+            {{.Email}}
+            {{if eq .ID $.Admin.ID}}<span class="badge badge-pending">вие</span>{{end}}
+          </td>
+          <td>
+            {{if .TOTPEnabled}}<span class="badge badge-active">настроена</span>
+            {{else}}<span class="badge badge-expired">чака настройка</span>{{end}}
+          </td>
+          <td>
+            {{if .Active}}<span class="badge badge-active">Активен</span>
+            {{else}}<span class="badge badge-revoked">Деактивиран</span>{{end}}
+          </td>
+          <td class="nowrap small">{{datetime .CreatedAt}}</td>
+          <td class="nowrap">
+            <form method="post" action="/admin/admins/{{.ID}}/reset-2fa" class="inline-form"
+                  x-data="confirmForm"
+                  data-confirm="Двуфакторната автентикация ще бъде нулирана и сесиите прекратени. Продължавате ли?"
+                  @submit="confirm">
+              <input type="hidden" name="csrf_token" value="{{$.CSRF}}">
+              <button type="submit" class="btn btn-small">Нулирай 2FA</button>
+            </form>
+            <details class="inline-form">
+              <summary class="btn btn-small">Нова парола</summary>
+              <form method="post" action="/admin/admins/{{.ID}}/password" class="stack" style="margin-top:.5rem">
+                <input type="hidden" name="csrf_token" value="{{$.CSRF}}">
+                <label for="pw-{{.ID}}" class="sr-only">Нова парола за {{.Email}}</label>
+                <input type="password" id="pw-{{.ID}}" name="password" minlength="10"
+                       autocomplete="new-password" placeholder="Минимум 10 знака" required>
+                <button type="submit" class="btn btn-small btn-primary">Смени паролата</button>
+              </form>
+            </details>
+            {{if ne .ID $.Admin.ID}}
+            <form method="post" action="/admin/admins/{{.ID}}/delete" class="inline-form"
+                  x-data="confirmForm"
+                  data-confirm="Администраторът ще бъде изтрит. Продължавате ли?"
+                  @submit="confirm">
+              <input type="hidden" name="csrf_token" value="{{$.CSRF}}">
+              <button type="submit" class="btn btn-small btn-danger">Изтрий</button>
+            </form>
+            {{end}}
+          </td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="card">
+  <h2 class="card-title">Нов администратор</h2>
+  <form method="post" action="/admin/admins">
+    <input type="hidden" name="csrf_token" value="{{.CSRF}}">
+    <div class="form-row">
+      <div class="field">
+        <label for="email">Имейл</label>
+        <input type="email" id="email" name="email" required>
+      </div>
+      <div class="field">
+        <label for="password">Парола</label>
+        <input type="password" id="password" name="password" minlength="10"
+               autocomplete="new-password" required>
+      </div>
+    </div>
+    <p class="hint">
+      Новият администратор ще настрои двуфакторна автентикация при първия си вход.
+    </p>
+    <div class="form-actions">
+      <button type="submit" class="btn btn-primary">Създай</button>
+    </div>
+  </form>
+</div>
+{{end}}

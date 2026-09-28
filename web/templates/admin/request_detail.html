@@ -1,0 +1,208 @@
+{{define "content"}}
+{{$r := .Request}}
+<div class="page-head">
+  <div>
+    <h1>Запитване №{{$r.ID}}</h1>
+    <p class="muted">{{$r.ClientName}} ({{$r.ClientCode}}) — {{template "request_badge" $r.Status}}</p>
+  </div>
+  <a class="btn" href="/admin/requests">← Всички запитвания</a>
+</div>
+
+{{template "errors" .Errors}}
+
+{{if .ExternalDown}}
+<div class="alert alert-warning" role="status">
+  Външната база данни не е достъпна, затова се показват потребителите от самото
+  запитване вместо текущия списък на клиента.
+</div>
+{{end}}
+
+<div class="card">
+  <h2 class="card-title">Данни от подаването</h2>
+  <dl class="details">
+    <dt>Подадено на</dt><dd>{{datetime $r.CreatedAt}}</dd>
+    <dt>Подател</dt><dd>{{$r.SubmitterEmail}}</dd>
+    <dt>Търговец (LOGIN)</dt><dd class="mono">{{$r.SalerLogin}}</dd>
+    <dt>Клиентски номер</dt><dd class="mono">{{$r.ClientCode}}</dd>
+    <dt>Име на клиент</dt><dd>{{$r.ClientName}}</dd>
+    <dt>Обект на клиента</dt><dd>{{$r.ClientObject}}</dd>
+    <dt>Магазин</dt><dd>{{$r.ClientStore}}</dd>
+    <dt>Потребители</dt><dd>{{join ", " $r.Usernames}}</dd>
+    <dt>Модули</dt>
+    <dd>{{range $i, $m := $r.Modules}}{{if $i}}, {{end}}{{describeModule $m.Module $m.Tier}}{{end}}</dd>
+    <dt>Тест период</dt><dd>{{yesno $r.TestPeriod}}</dd>
+    <dt>Активация от</dt><dd>{{date $r.StartDate}}</dd>
+    <dt>Активация до</dt><dd>{{date $r.EndDate}}</dd>
+    <dt>Активация за</dt><dd>{{$r.DurationLabel}}</dd>
+    {{if $r.DecidedAt.Valid}}
+    <dt>Решение на</dt><dd>{{datetime $r.DecidedAt.String}}</dd>
+    <dt>Решение от</dt><dd>{{$r.DecidedByEmail}}</dd>
+    <dt>Коментар</dt><dd>{{if $r.AdminComment}}{{$r.AdminComment}}{{else}}<span class="muted">—</span>{{end}}</dd>
+    {{end}}
+  </dl>
+</div>
+
+{{if eq (printf "%s" $r.Status) "pending"}}
+
+{{if .Overlaps}}
+<div class="alert alert-warning" role="status">
+  <strong>Потребителят вече има активен модул за този период.</strong>
+  <ul>
+    {{range .Overlaps}}
+    <li>{{.Username}} — {{.Module}}{{if .Tier}} ({{.Tier}}){{end}}: {{date .StartDate}} — {{date .EndDate}}</li>
+    {{end}}
+  </ul>
+  Одобрението е възможно въпреки това.
+</div>
+{{end}}
+
+<div class="card">
+  <h2 class="card-title">Редакция преди решение</h2>
+
+  <form method="post" action="/admin/requests/{{$r.ID}}/edit"
+        x-data="requestForm"
+        data-test-period-used="{{.TestPeriodUsed}}"
+        data-test-period="{{$r.TestPeriod}}"
+        data-fast-calculator="{{range $r.Modules}}{{if eq (printf "%s" .Module) "FAST_CALCULATOR"}}true{{end}}{{end}}"
+        data-haynes-pro="{{range $r.Modules}}{{if eq (printf "%s" .Module) "HAYNESPRO"}}true{{end}}{{end}}"
+        data-tier="{{range $r.Modules}}{{if eq (printf "%s" .Module) "HAYNESPRO"}}{{.Tier}}{{end}}{{end}}"
+        data-months="{{$r.Months}}">
+
+    <input type="hidden" name="csrf_token" value="{{.CSRF}}">
+    <input type="hidden" name="test_period" :value="testPeriodValue">
+    <input type="hidden" name="module_fast_calculator" :value="fastCalculatorValue">
+    <input type="hidden" name="module_haynespro" :value="haynesProValue">
+    <input type="hidden" name="haynespro_tier" :value="tierValue">
+    <input type="hidden" name="months" :value="monthsValue">
+
+    <fieldset>
+      <legend>Потребители</legend>
+      <div class="picker">
+        <div class="picker-toolbar">
+          <input type="search" placeholder="Търсене на потребител"
+                 aria-label="Търсене на потребител"
+                 x-model="search" @input="filterUsers">
+          <button type="button" class="btn btn-small" @click="selectAllUsers">Избери всички</button>
+          <button type="button" class="btn btn-small" @click="clearAllUsers">Изчисти</button>
+        </div>
+        <div class="picker-list" x-ref="userList">
+          {{range $i, $u := .ClientUsernames}}
+          <div class="check" data-username="{{$u}}">
+            <input type="checkbox" id="edit-user-{{$i}}" name="usernames" value="{{$u}}"
+              {{range $sel := $r.Usernames}}{{if eq $sel $u}}checked{{end}}{{end}}>
+            <label for="edit-user-{{$i}}">{{$u}}</label>
+          </div>
+          {{end}}
+        </div>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Модули</legend>
+
+      <div class="check">
+        <input type="checkbox" id="edit_test_period"
+               x-model="testPeriod" @change="onTestPeriodChange"
+               {{if and .TestPeriodUsed (not $r.TestPeriod)}}disabled{{end}}>
+        <label for="edit_test_period">Тест период</label>
+      </div>
+      {{if and .TestPeriodUsed (not $r.TestPeriod)}}
+      <p class="hint">Тестовият период вече е използван за този клиент.</p>
+      {{end}}
+
+      <div class="check">
+        <input type="checkbox" id="edit_module_fc" x-model="fastCalculator" :disabled="locked">
+        <label for="edit_module_fc">Fast Calculator</label>
+      </div>
+
+      <div class="check">
+        <input type="checkbox" id="edit_module_hp" x-model="haynesPro" :disabled="locked">
+        <label for="edit_module_hp">HaynesPro</label>
+      </div>
+
+      <div class="field" x-show="showTier">
+        <label for="edit_tier">Ниво на HaynesPro</label>
+        <select id="edit_tier" x-model="tier" :disabled="locked">
+          <option value="BUSINESS">Business</option>
+          <option value="PRO">Pro</option>
+          <option value="ULTRA">Ultra</option>
+        </select>
+      </div>
+    </fieldset>
+
+    <div class="form-row">
+      <div class="field">
+        <label for="edit_start_date">Активация от дата</label>
+        <input type="date" id="edit_start_date" name="start_date"
+               value="{{$r.StartDate}}" min="{{.Today}}" required>
+      </div>
+      <div class="field">
+        <label for="edit_months">Активация за</label>
+        <select id="edit_months" x-model="months" :disabled="locked">
+          {{range .Durations}}<option value="{{.Months}}">{{.Label}}</option>{{end}}
+        </select>
+      </div>
+    </div>
+
+    <div class="form-actions">
+      <button type="submit" class="btn">Запази промените</button>
+    </div>
+  </form>
+</div>
+
+<div class="card">
+  <h2 class="card-title">Решение</h2>
+
+  <form method="post" action="/admin/requests/{{$r.ID}}/approve" id="decide-form">
+    <input type="hidden" name="csrf_token" value="{{.CSRF}}">
+
+    <div class="field">
+      <label for="admin_comment">Коментар (незадължителен)</label>
+      <textarea id="admin_comment" name="admin_comment" rows="3"
+                placeholder="Коментарът се включва в имейла до подателя."></textarea>
+    </div>
+
+    <div class="form-actions">
+      <button type="submit" class="btn btn-success">Одобри</button>
+      <button type="submit" class="btn btn-danger"
+              formaction="/admin/requests/{{$r.ID}}/deny">Откажи</button>
+    </div>
+  </form>
+</div>
+
+{{end}}
+
+<div class="card">
+  <h2 class="card-title">Активации на клиента</h2>
+  {{if .Activations}}
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th scope="col">Потребител</th>
+          <th scope="col">Модул</th>
+          <th scope="col">Ниво</th>
+          <th scope="col">От дата</th>
+          <th scope="col">До дата</th>
+          <th scope="col">Статус</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{range .Activations}}
+        <tr>
+          <td class="nowrap">{{.Username}}</td>
+          <td>{{moduleLabel .Module}}</td>
+          <td>{{tierLabel .Module .Tier}}</td>
+          <td class="nowrap">{{date .StartDate}}</td>
+          <td class="nowrap">{{date .EndDate}}</td>
+          <td>{{template "activation_badge" .Status}}</td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+  </div>
+  {{else}}
+  <p class="empty">Този клиент няма активации.</p>
+  {{end}}
+</div>
+{{end}}

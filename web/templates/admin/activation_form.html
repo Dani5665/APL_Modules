@@ -1,0 +1,96 @@
+{{define "content"}}
+{{$a := .Activation}}
+<div class="page-head">
+  <h1>{{if .IsNew}}Нова активация{{else}}Редакция на активация{{end}}</h1>
+  <a class="btn" href="/admin/activations">← Всички активации</a>
+</div>
+
+{{template "errors" .Errors}}
+
+<div class="card">
+  <form method="post"
+        action="{{if .IsNew}}/admin/activations{{else}}/admin/activations/{{$a.ID}}{{end}}"
+        x-data="activationForm" data-module="{{$a.Module}}">
+    <input type="hidden" name="csrf_token" value="{{.CSRF}}">
+
+    <fieldset>
+      {{/* Client data is edited here rather than through a standalone client
+           record - PLACEHOLDER-D, resolved; see DECISIONS.md. */}}
+      <legend>Клиент</legend>
+      <div class="form-row">
+        <div class="field">
+          <label for="client_code">Клиентски номер</label>
+          <input type="text" id="client_code" name="client_code" value="{{$a.ClientCode}}"
+                 inputmode="numeric" required>
+        </div>
+        <div class="field">
+          <label for="client_name">Име на клиент</label>
+          <input type="text" id="client_name" name="client_name" value="{{$a.ClientName}}" required>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="field">
+          <label for="client_object">Обект на клиента</label>
+          <input type="text" id="client_object" name="client_object" value="{{$a.ClientObject}}">
+        </div>
+        <div class="field">
+          <label for="client_store">Магазин</label>
+          <input type="text" id="client_store" name="client_store" value="{{$a.ClientStore}}">
+        </div>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Активация</legend>
+      <div class="field">
+        <label for="username">Потребител</label>
+        <input type="text" id="username" name="username" value="{{$a.Username}}" required>
+      </div>
+
+      <div class="form-row">
+        <div class="field">
+          <label for="module">Модул</label>
+          <select id="module" name="module" x-model="module">
+            {{range .Modules}}
+            <option value="{{.Key}}" {{if eq $a.Module .Key}}selected{{end}}>{{.Label}}</option>
+            {{end}}
+          </select>
+        </div>
+
+        <div class="field" x-show="showTier">
+          <label for="tier">Ниво</label>
+          <select id="tier" name="tier">
+            <option value="BUSINESS" {{if eq (printf "%s" $a.Tier) "BUSINESS"}}selected{{end}}>Business</option>
+            <option value="PRO" {{if eq (printf "%s" $a.Tier) "PRO"}}selected{{end}}>Pro</option>
+            <option value="ULTRA" {{if eq (printf "%s" $a.Tier) "ULTRA"}}selected{{end}}>Ultra</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="field">
+          <label for="start_date">От дата</label>
+          <input type="date" id="start_date" name="start_date" value="{{$a.StartDate}}" required>
+        </div>
+        <div class="field">
+          <label for="end_date">До дата</label>
+          <input type="date" id="end_date" name="end_date" value="{{$a.EndDate}}">
+        </div>
+        <div class="field">
+          <label for="months">или за</label>
+          <select id="months" name="months">
+            <option value="">— задайте крайна дата —</option>
+            {{range .Durations}}<option value="{{.Months}}">{{.Label}}</option>{{end}}
+          </select>
+          <p class="hint">Ако изберете период, крайната дата се изчислява автоматично.</p>
+        </div>
+      </div>
+    </fieldset>
+
+    <div class="form-actions">
+      <button type="submit" class="btn btn-primary">Запази</button>
+      <a class="btn" href="/admin/activations">Отказ</a>
+    </div>
+  </form>
+</div>
+{{end}}

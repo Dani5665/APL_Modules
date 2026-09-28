@@ -1,0 +1,104 @@
+{{define "content"}}
+<div class="page-head">
+  <h1>SMTP настройки</h1>
+</div>
+
+{{template "errors" .Errors}}
+
+<div class="card">
+  <h2 class="card-title">Сървър</h2>
+  <form method="post" action="/admin/settings/smtp">
+    <input type="hidden" name="csrf_token" value="{{.CSRF}}">
+
+    <div class="form-row">
+      <div class="field">
+        <label for="host">SMTP сървър</label>
+        <input type="text" id="host" name="host" value="{{.Settings.Host}}"
+               placeholder="smtp.example.com" required>
+      </div>
+      <div class="field field-narrow">
+        <label for="port">Порт</label>
+        <input type="number" id="port" name="port" min="1" max="65535"
+               value="{{if .Settings.Port}}{{.Settings.Port}}{{else}}587{{end}}" required>
+      </div>
+      <div class="field">
+        <label for="security">Защита</label>
+        <select id="security" name="security">
+          {{range .SecurityOptions}}
+          <option value="{{.}}" {{if eq $.Settings.Security .}}selected{{end}}>{{.Label}}</option>
+          {{end}}
+        </select>
+      </div>
+    </div>
+
+    <div class="form-row">
+      <div class="field">
+        <label for="username">Потребител</label>
+        <input type="text" id="username" name="username" value="{{.Settings.Username}}"
+               autocomplete="off">
+        <p class="hint">Оставете празно, ако сървърът не изисква автентикация.</p>
+      </div>
+      <div class="field">
+        <label for="password">Парола</label>
+        <input type="password" id="password" name="password" autocomplete="new-password"
+               placeholder="{{if .HasStoredPassword}}••••••••  (запазена){{else}}няма запазена парола{{end}}">
+        <p class="hint">
+          {{if .HasStoredPassword}}Оставете празно, за да запазите текущата парола.
+          {{else}}Паролата се съхранява шифрована.{{end}}
+        </p>
+      </div>
+    </div>
+
+    <div class="form-row">
+      <div class="field">
+        <label for="from_address">Адрес на подателя</label>
+        <input type="email" id="from_address" name="from_address"
+               value="{{.Settings.FromAddress}}" required>
+      </div>
+      <div class="field">
+        <label for="from_name">Име на подателя</label>
+        <input type="text" id="from_name" name="from_name" value="{{.Settings.FromName}}"
+               placeholder="Модули: заявки">
+      </div>
+    </div>
+
+    <div class="field">
+      <label for="notify_recipients">Получатели на известия за нови запитвания</label>
+      <textarea id="notify_recipients" name="notify_recipients" rows="4"
+                placeholder="admin@example.com&#10;prodazhbi@example.com">{{.RecipientsRaw}}</textarea>
+      <p class="hint">Един адрес на ред (или разделени със запетая).</p>
+    </div>
+
+    <div class="form-actions">
+      <button type="submit" class="btn btn-primary">Запази</button>
+    </div>
+  </form>
+</div>
+
+<div class="card">
+  <h2 class="card-title">Тестов имейл</h2>
+
+  {{if .TestError}}
+  <div class="alert alert-error" role="alert">
+    <strong>Изпращането е неуспешно.</strong>
+    <div class="code-block">{{.TestError}}</div>
+  </div>
+  {{end}}
+
+  <form method="post" action="/admin/settings/smtp/test">
+    <input type="hidden" name="csrf_token" value="{{.CSRF}}">
+    <div class="form-row">
+      <div class="field">
+        <label for="test_address">Изпрати тестов имейл до</label>
+        <input type="email" id="test_address" name="test_address" value="{{.TestAddress}}" required>
+      </div>
+      <div class="field field-narrow" style="display:flex;align-items:flex-end">
+        <button type="submit" class="btn">Изпрати тест</button>
+      </div>
+    </div>
+    <p class="hint">
+      Тестът се изпраща веднага, без опашката, за да видите грешката от сървъра.
+    </p>
+  </form>
+</div>
+{{end}}

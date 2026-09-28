@@ -1,0 +1,12 @@
+.git
+.gitignore
+*.md
+!README.md
+.env
+.env.*
+!.env.example
+/data
+/tmp
+*.db
+*.db-wal
+*.db-shm

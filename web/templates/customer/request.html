@@ -1,0 +1,275 @@
+{{define "content"}}
+<div class="page-head">
+  <div>
+    <h1>Ново запитване за активация</h1>
+    <p class="muted">Клиент {{.Client.Name}} ({{.Client.Code}})</p>
+  </div>
+</div>
+
+{{template "request_form" .}}
+
+{{/* B. Информация за клиента */}}
+<div class="card">
+  <h2 class="card-title">Информация за клиента</h2>
+
+  <dl class="details">
+    <dt>Име на клиент</dt><dd>{{.Client.Name}}</dd>
+    <dt>Обект</dt><dd>{{.Client.Object}}</dd>
+    <dt>Магазин</dt><dd>{{.Client.Store}}</dd>
+  </dl>
+
+  <h3>Активни модули по потребители</h3>
+  {{if .ClientUsernames}}
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th scope="col">Потребител</th>
+          <th scope="col">Модул</th>
+          <th scope="col">Ниво</th>
+          <th scope="col">От дата</th>
+          <th scope="col">До дата</th>
+          <th scope="col">Статус</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{range $username := .ClientUsernames}}
+          {{$found := false}}
+          {{range $a := $.Activations}}
+            {{if eq $a.Username $username}}
+              {{$found = true}}
+              <tr>
+                <td class="nowrap">{{$a.Username}}</td>
+                <td>{{moduleLabel $a.Module}}</td>
+                <td>{{tierLabel $a.Module $a.Tier}}</td>
+                <td class="nowrap">{{date $a.StartDate}}</td>
+                <td class="nowrap">{{date $a.EndDate}}</td>
+                <td>{{template "activation_badge" $a.Status}}</td>
+              </tr>
+            {{end}}
+          {{end}}
+          {{if not $found}}
+          <tr>
+            <td class="nowrap">{{$username}}</td>
+            <td colspan="5" class="muted">Няма активни модули</td>
+          </tr>
+          {{end}}
+        {{end}}
+      </tbody>
+    </table>
+  </div>
+  {{else}}
+  <p class="empty">Този клиент няма потребители във външната база.</p>
+  {{end}}
+
+  <h3>Чакащи запитвания за този клиент</h3>
+  {{if .PendingRequests}}
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th scope="col">Подадено на</th>
+          <th scope="col">Потребители</th>
+          <th scope="col">Модули</th>
+          <th scope="col">Период</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{range .PendingRequests}}
+        <tr>
+          <td class="nowrap">{{datetime .CreatedAt}}</td>
+          <td>{{join ", " .Usernames}}</td>
+          <td>
+            {{range $i, $m := .Modules}}{{if $i}}, {{end}}{{describeModule $m.Module $m.Tier}}{{end}}
+            {{if .TestPeriod}}<span class="badge badge-pending">Тест период</span>{{end}}
+          </td>
+          <td class="nowrap">{{date .StartDate}} — {{date .EndDate}}</td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+  </div>
+  {{else}}
+  <p class="empty">Няма чакащи запитвания за този клиент.</p>
+  {{end}}
+</div>
+
+{{/* C. Клиенти на моите магазини */}}
+<div class="card">
+  <h2 class="card-title">Клиенти с активни модули</h2>
+  <p class="hint">Показват се само клиенти, на които има поне един активен модул.</p>
+
+  <div class="field">
+    <label for="client-search">Търсене по клиентски номер, име, обект или потребител</label>
+    <input type="search" id="client-search" name="q" value="{{.Search}}"
+           hx-get="/clients"
+           hx-trigger="input changed delay:300ms, search"
+           hx-target="#client-list"
+           hx-select="#client-list"
+           hx-swap="outerHTML"
+           hx-indicator="#client-search-indicator">
+    <span id="client-search-indicator" class="htmx-indicator hint">Търсене…</span>
+  </div>
+
+  {{template "client_list" .}}
+</div>
+{{end}}
+
+{{/* A. Формата. Swapped as a whole by htmx, so it carries its own state. */}}
+{{define "request_form"}}
+<div id="request-form-wrap" class="card">
+  <h2 class="card-title">Заявка</h2>
+
+  {{template "errors" .Errors}}
+
+  <form id="request-form"
+        hx-post="/request"
+        hx-target="#request-form-wrap"
+        hx-swap="outerHTML"
+        hx-disabled-elt="#request-submit"
+        x-data="requestForm"
+        data-test-period-used="{{.TestPeriodUsed}}"
+        data-test-period="{{.Submitted.TestPeriod}}"
+        data-fast-calculator="{{.Submitted.FastCalculator}}"
+        data-haynes-pro="{{.Submitted.HaynesPro}}"
+        data-tier="{{.Submitted.HaynesProTier}}"
+        data-months="{{.Submitted.Months}}">
+
+    <input type="hidden" name="csrf_token" value="{{.CSRF}}">
+
+    {{/* Disabled inputs are not submitted, so the effective values are
+         mirrored here. The server re-applies every rule regardless. */}}
+    <input type="hidden" name="test_period" :value="testPeriodValue">
+    <input type="hidden" name="module_fast_calculator" :value="fastCalculatorValue">
+    <input type="hidden" name="module_haynespro" :value="haynesProValue">
+    <input type="hidden" name="haynespro_tier" :value="tierValue">
+    <input type="hidden" name="months" :value="monthsValue">
+
+    <div class="form-row">
+      <div class="field">
+        <label for="client_code">Клиентски номер</label>
+        <div class="readonly-value mono" id="client_code">{{.Client.Code}}</div>
+      </div>
+      <div class="field">
+        <label for="client_name">Име на клиент</label>
+        <div class="readonly-value" id="client_name">{{.Client.Name}}</div>
+      </div>
+      <div class="field">
+        <label for="client_object">Обект на клиента</label>
+        <div class="readonly-value" id="client_object">
+          {{if .Client.Object}}{{.Client.Object}}{{else}}<span class="muted">—</span>{{end}}
+        </div>
+      </div>
+    </div>
+
+    <fieldset>
+      <legend>Потребители</legend>
+      {{if .ClientUsernames}}
+      <div class="picker">
+        <div class="picker-toolbar">
+          <input type="search" placeholder="Търсене на потребител"
+                 aria-label="Търсене на потребител"
+                 x-model="search" @input="filterUsers">
+          <button type="button" class="btn btn-small" @click="selectAllUsers">Избери всички</button>
+          <button type="button" class="btn btn-small" @click="clearAllUsers">Изчисти</button>
+        </div>
+        <div class="picker-list" x-ref="userList">
+          {{range $i, $u := .ClientUsernames}}
+          <div class="check" data-username="{{$u}}">
+            <input type="checkbox" id="user-{{$i}}" name="usernames" value="{{$u}}"
+              {{range $sel := $.Submitted.Usernames}}{{if eq $sel $u}}checked{{end}}{{end}}>
+            <label for="user-{{$i}}">{{$u}}</label>
+          </div>
+          {{end}}
+        </div>
+      </div>
+      <p class="hint">Изберете поне един потребител. Избраните модули важат за всички избрани потребители.</p>
+      {{else}}
+      <p class="alert alert-warning">Този клиент няма потребители във външната база.</p>
+      {{end}}
+    </fieldset>
+
+    <fieldset>
+      <legend>Модули</legend>
+
+      <div class="check">
+        <input type="checkbox" id="test_period_box"
+               x-model="testPeriod" @change="onTestPeriodChange"
+               {{if .TestPeriodUsed}}disabled{{end}}>
+        <label for="test_period_box">Тест период</label>
+      </div>
+      {{if .TestPeriodUsed}}
+      <p class="hint">Тестовият период вече е използван за този клиент.</p>
+      {{else}}
+      <p class="hint">
+        Тестовият период включва Fast Calculator и HaynesPro Business за 1 месец
+        и може да се използва само веднъж за клиент.
+      </p>
+      {{end}}
+
+      <div class="check">
+        <input type="checkbox" id="module_fc_box"
+               x-model="fastCalculator" :disabled="locked">
+        <label for="module_fc_box">Fast Calculator</label>
+      </div>
+
+      <div class="check">
+        <input type="checkbox" id="module_hp_box"
+               x-model="haynesPro" :disabled="locked">
+        <label for="module_hp_box">HaynesPro</label>
+      </div>
+
+      <div class="field" x-show="showTier">
+        <label for="haynespro_tier_select">Ниво на HaynesPro</label>
+        <select id="haynespro_tier_select" x-model="tier" :disabled="locked">
+          <option value="BUSINESS">Business</option>
+          <option value="PRO">Pro</option>
+          <option value="ULTRA">Ultra</option>
+        </select>
+      </div>
+    </fieldset>
+
+    <div class="form-row">
+      <div class="field">
+        <label for="start_date">Активация от дата</label>
+        <input type="date" id="start_date" name="start_date"
+               value="{{if .Submitted.StartDate}}{{.Submitted.StartDate}}{{else}}{{.Today}}{{end}}"
+               min="{{.Today}}" required>
+      </div>
+
+      <div class="field">
+        <label for="months_select">Активация за</label>
+        <select id="months_select" x-model="months" :disabled="locked">
+          {{range .Durations}}
+          <option value="{{.Months}}">{{.Label}}</option>
+          {{end}}
+        </select>
+      </div>
+    </div>
+
+    <div class="form-actions">
+      {{/* Double submission is prevented by hx-disabled-elt on the form, which
+           disables this button only after htmx has started the request.
+           Disabling it from a click handler instead stops the browser from
+           submitting the form at all. */}}
+      <button type="submit" id="request-submit" class="btn btn-primary">
+        Изпрати запитване
+      </button>
+      <span class="htmx-indicator hint">Изпращане…</span>
+    </div>
+  </form>
+</div>
+{{end}}
+
+{{define "submit_success"}}
+<div id="request-form-wrap" class="card">
+  <div class="alert alert-success" role="status">
+    <strong>Запитването е изпратено.</strong>
+    Номер на запитването: {{.RequestID}}. Ще получите имейл, когато администратор
+    вземе решение.
+  </div>
+  <p>
+    <a class="btn" href="/">Към списъка с клиенти</a>
+  </p>
+</div>
+{{end}}

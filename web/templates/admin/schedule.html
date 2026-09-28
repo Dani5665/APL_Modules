@@ -1,0 +1,93 @@
+{{define "content"}}
+<div class="page-head">
+  <h1>График на месечната справка</h1>
+</div>
+
+{{template "errors" .Errors}}
+
+{{if .SendError}}
+<div class="alert alert-error" role="alert">
+  <strong>Ръчното изпращане е неуспешно.</strong>
+  <div class="code-block">{{.SendError}}</div>
+</div>
+{{end}}
+
+<div class="card">
+  <h2 class="card-title">Състояние</h2>
+  <dl class="details">
+    <dt>Включен</dt><dd>{{yesno .Schedule.Enabled}}</dd>
+    <dt>Следващо изпълнение</dt>
+    <dd>{{if .NextRunAt}}{{.NextRunAt}}{{else}}<span class="muted">—</span>{{end}}</dd>
+    <dt>Последно изпълнение</dt>
+    <dd>{{if .LastRunAt}}{{.LastRunAt}}{{else}}<span class="muted">—</span>{{end}}</dd>
+    <dt>Резултат</dt>
+    <dd>{{if .Schedule.LastResult}}{{.Schedule.LastResult}}{{else}}<span class="muted">—</span>{{end}}</dd>
+  </dl>
+</div>
+
+<div class="card">
+  <h2 class="card-title">Настройки</h2>
+  <form method="post" action="/admin/settings/schedule">
+    <input type="hidden" name="csrf_token" value="{{.CSRF}}">
+
+    <div class="check">
+      <input type="checkbox" id="enabled" name="enabled" value="1"
+             {{if .Schedule.Enabled}}checked{{end}}>
+      <label for="enabled">Изпращай справката по график</label>
+    </div>
+
+    <div class="form-row">
+      <div class="field field-narrow">
+        <label for="day_of_month">Ден от месеца</label>
+        <select id="day_of_month" name="day_of_month">
+          {{range $d := seq 1 31}}
+          <option value="{{$d}}" {{if eq $.Schedule.DayOfMonth $d}}selected{{end}}>{{$d}}</option>
+          {{end}}
+        </select>
+        <p class="hint">
+          Ако месецът е по-кратък, справката се изпраща на последния му ден.
+        </p>
+      </div>
+
+      <div class="field field-narrow">
+        <label for="time_hhmm">Час (Europe/Sofia)</label>
+        <input type="time" id="time_hhmm" name="time_hhmm" value="{{.Schedule.TimeHHMM}}" required>
+      </div>
+    </div>
+
+    <div class="field">
+      <label for="recipients">Получатели</label>
+      <textarea id="recipients" name="recipients" rows="4"
+                placeholder="upravitel@example.com">{{.RecipientsRaw}}</textarea>
+      <p class="hint">Един адрес на ред (или разделени със запетая).</p>
+    </div>
+
+    <div class="check">
+      <input type="checkbox" id="group_by_client" name="group_by_client" value="1"
+             {{if .Schedule.GroupByClient}}checked{{end}}>
+      <label for="group_by_client">Групирай по обекти</label>
+    </div>
+    <p class="hint">
+      Справката се изпраща с по един ред на потребител и модул, групирани под
+      клиента им, вместо с по един ред на всяка активация. Изборът се пази за
+      следващите справки, включително ръчното изпращане по-долу.
+    </p>
+
+    <div class="form-actions">
+      <button type="submit" class="btn btn-primary">Запази</button>
+    </div>
+  </form>
+</div>
+
+<div class="card">
+  <h2 class="card-title">Ръчно изпращане</h2>
+  <p>
+    Генерира справката веднага (с текущо запазените настройки по-горе) и я
+    поставя в опашката за изпращане до получателите. Графикът не се променя.
+  </p>
+  <form method="post" action="/admin/settings/schedule/send-now">
+    <input type="hidden" name="csrf_token" value="{{.CSRF}}">
+    <button type="submit" class="btn">Изпрати сега</button>
+  </form>
+</div>
+{{end}}

@@ -1,0 +1,16 @@
+{{define "content"}}
+<h1>Кодове за възстановяване</h1>
+
+<div class="alert alert-warning" role="status">
+  <strong>Запишете тези кодове сега.</strong> Показват се само този път.
+  Всеки код може да се използва еднократно вместо код от приложението.
+</div>
+
+<ul class="recovery-codes">
+  {{range .RecoveryCodes}}<li>{{.}}</li>{{end}}
+</ul>
+
+<p class="center">
+  <a class="btn btn-primary" href="/admin">Записах ги — към админ панела</a>
+</p>
+{{end}}

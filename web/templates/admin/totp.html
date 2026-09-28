@@ -1,0 +1,28 @@
+{{define "content"}}
+<h1>Двуфакторна автентикация</h1>
+
+{{if .Error}}<div class="alert alert-error" role="alert">{{.Error}}</div>{{end}}
+
+<form method="post" action="/admin/login/2fa" class="stack">
+  <input type="hidden" name="csrf_token" value="{{.CSRF}}">
+
+  <div class="field">
+    <label for="code">Код от приложението</label>
+    <input type="text" id="code" name="code" inputmode="numeric" pattern="[0-9]*"
+           maxlength="6" autocomplete="one-time-code" autofocus>
+    <p class="hint">Шестцифрен код от вашето приложение за автентикация.</p>
+  </div>
+
+  <details>
+    <summary>Нямам достъп до приложението</summary>
+    <div class="field" style="margin-top:.7rem">
+      <label for="recovery_code">Код за възстановяване</label>
+      <input type="text" id="recovery_code" name="recovery_code"
+             autocomplete="off" placeholder="XXXXX-XXXXX">
+      <p class="hint">Всеки код за възстановяване може да се използва само веднъж.</p>
+    </div>
+  </details>
+
+  <button type="submit" class="btn btn-primary btn-block">Вход</button>
+</form>
+{{end}}

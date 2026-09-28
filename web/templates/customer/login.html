@@ -1,0 +1,25 @@
+{{define "content"}}
+<h1>Вход</h1>
+
+{{if .Error}}<div class="alert alert-error" role="alert">{{.Error}}</div>{{end}}
+
+<form method="post" action="/login" class="stack">
+  <div class="field">
+    <label for="email">Имейл</label>
+    <input type="email" id="email" name="email" value="{{.Email}}"
+           autocomplete="username" required autofocus>
+  </div>
+
+  <div class="field">
+    <label for="password">Парола</label>
+    <input type="password" id="password" name="password"
+           autocomplete="current-password" required>
+  </div>
+
+  <button type="submit" class="btn btn-primary btn-block">Вход</button>
+</form>
+
+<p class="hint center">
+  Ако сте забравили паролата си, свържете се с администратор.
+</p>
+{{end}}

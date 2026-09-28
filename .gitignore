@@ -1,0 +1,11 @@
+# Local data and secrets
+/data/
+.env
+*.db
+*.db-wal
+*.db-shm
+
+# Build output
+/app
+/app.exe
+/out/

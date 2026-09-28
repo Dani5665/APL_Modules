@@ -1,0 +1,79 @@
+{{define "content"}}
+<div class="page-head">
+  <h1>Изходящи имейли</h1>
+</div>
+
+<div class="card">
+  <form class="filters" method="get" action="/admin/outbox">
+    <div class="field field-narrow">
+      <label for="status">Статус</label>
+      <select id="status" name="status">
+        {{range .Statuses}}
+        <option value="{{.Value}}" {{if eq $.Status .Value}}selected{{end}}>{{.Label}}</option>
+        {{end}}
+      </select>
+    </div>
+    <div class="field field-narrow">
+      <button type="submit" class="btn">Филтрирай</button>
+    </div>
+  </form>
+
+  {{if .Messages}}
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th scope="col">№</th>
+          <th scope="col">Шаблон</th>
+          <th scope="col">Получатели</th>
+          <th scope="col">Тема</th>
+          <th scope="col">Статус</th>
+          <th scope="col" class="numeric">Опити</th>
+          <th scope="col">Последна грешка</th>
+          <th scope="col"></th>
+        </tr>
+      </thead>
+      <tbody>
+        {{range .Messages}}
+        <tr>
+          <td class="numeric">{{.ID}}</td>
+          <td class="small">{{.TemplateKey}}</td>
+          <td class="small">{{.Recipients}}</td>
+          <td class="small">
+            {{.Subject}}
+            {{if .AttachmentName.Valid}}<br><span class="badge badge-pending">{{.AttachmentName.String}}</span>{{end}}
+          </td>
+          <td>
+            {{if eq .Status "sent"}}<span class="badge badge-active">Изпратен</span>
+            {{else if eq .Status "failed"}}<span class="badge badge-revoked">Неуспешен</span>
+            {{else}}<span class="badge badge-pending">Чака</span>{{end}}
+            {{if .SentAt.Valid}}<div class="hint">{{datetime .SentAt.String}}</div>{{end}}
+          </td>
+          <td class="numeric">{{.Attempts}}</td>
+          <td class="small">
+            {{if .LastError}}<div class="code-block">{{.LastError}}</div>{{else}}<span class="muted">—</span>{{end}}
+          </td>
+          <td class="nowrap">
+            {{if eq .Status "failed"}}
+            <form method="post" action="/admin/outbox/{{.ID}}/retry" class="inline-form">
+              <input type="hidden" name="csrf_token" value="{{$.CSRF}}">
+              <button type="submit" class="btn btn-small">Опитай пак</button>
+            </form>
+            {{end}}
+            <form method="post" action="/admin/outbox/{{.ID}}/delete" class="inline-form"
+                  x-data="confirmForm" data-confirm="Съобщението ще бъде изтрито. Продължавате ли?" @submit="confirm">
+              <input type="hidden" name="csrf_token" value="{{$.CSRF}}">
+              <button type="submit" class="btn btn-small btn-danger">Изтрий</button>
+            </form>
+          </td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+  </div>
+  {{template "pagination" .Page}}
+  {{else}}
+  <p class="empty">Няма съобщения по този филтър.</p>
+  {{end}}
+</div>
+{{end}}

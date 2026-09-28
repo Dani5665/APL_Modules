@@ -1,0 +1,131 @@
+{{define "content"}}
+<div class="page-head">
+  <h1>Клиенти и активации</h1>
+  <div class="form-actions" style="margin:0">
+    <form method="get" action="/admin/activations/export.xlsx" class="export-form">
+      <div class="check">
+        <input type="checkbox" id="export_group" name="group" value="1">
+        <label for="export_group">Групирай по обекти</label>
+      </div>
+      <button type="submit" class="btn">Експорт в Excel</button>
+    </form>
+    <a class="btn btn-primary" href="/admin/activations/new">Нова активация</a>
+  </div>
+</div>
+
+<div class="card">
+  <form class="filters" method="get" action="/admin/activations"
+        hx-get="/admin/activations?partial=1"
+        hx-trigger="input changed delay:300ms from:input[type=search], change"
+        hx-target="#activation-table"
+        hx-select="#activation-table"
+        hx-swap="outerHTML">
+    <div class="field field-narrow">
+      <label for="status">Статус</label>
+      <select id="status" name="status">
+        {{range .StatusOptions}}
+        <option value="{{.Value}}" {{if eq $.Filter.Status .Value}}selected{{end}}>{{.Label}}</option>
+        {{end}}
+      </select>
+    </div>
+
+    <div class="field field-narrow">
+      <label for="store">Магазин</label>
+      <select id="store" name="store">
+        <option value="">Всички</option>
+        {{range .Stores}}
+        <option value="{{.}}" {{if eq $.Filter.Store .}}selected{{end}}>{{.}}</option>
+        {{end}}
+      </select>
+    </div>
+
+    <div class="field field-narrow">
+      <label for="module">Модул</label>
+      <select id="module" name="module">
+        <option value="">Всички</option>
+        {{range .Modules}}
+        <option value="{{.Key}}" {{if eq $.Filter.Module (printf "%s" .Key)}}selected{{end}}>{{.Label}}</option>
+        {{end}}
+      </select>
+    </div>
+
+    <div class="field">
+      <label for="q">Търсене</label>
+      <input type="search" id="q" name="q" value="{{.Filter.Search}}"
+             placeholder="Номер, име, обект или потребител">
+    </div>
+
+    <div class="field field-narrow">
+      <button type="submit" class="btn">Филтрирай</button>
+    </div>
+  </form>
+
+  {{template "activation_table" .}}
+</div>
+{{end}}
+
+{{define "activation_table"}}
+<div id="activation-table">
+  {{if .Activations}}
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th scope="col">Клиент</th>
+          <th scope="col">Обект</th>
+          <th scope="col">Магазин</th>
+          <th scope="col">Потребител</th>
+          <th scope="col">Модул</th>
+          <th scope="col">Ниво</th>
+          <th scope="col">От дата</th>
+          <th scope="col">До дата</th>
+          <th scope="col">Статус</th>
+          <th scope="col"></th>
+        </tr>
+      </thead>
+      <tbody>
+        {{range .Activations}}
+        <tr>
+          <td>
+            <div class="mono small">{{.ClientCode}}</div>
+            <div>{{.ClientName}}</div>
+          </td>
+          <td class="small">{{.ClientObject}}</td>
+          <td class="small">{{.ClientStore}}</td>
+          <td class="nowrap small">{{.Username}}</td>
+          <td>{{moduleLabel .Module}}</td>
+          <td>{{tierLabel .Module .Tier}}</td>
+          <td class="nowrap">{{date .StartDate}}</td>
+          <td class="nowrap">{{date .EndDate}}</td>
+          <td>{{template "activation_badge" .Status}}</td>
+          <td class="nowrap">
+            <a class="btn btn-small" href="/admin/activations/{{.ID}}">Редакция</a>
+            {{if .RevokedAt.Valid}}
+            <form method="post" action="/admin/activations/{{.ID}}/restore" class="inline-form">
+              <input type="hidden" name="csrf_token" value="{{$.CSRF}}">
+              <button type="submit" class="btn btn-small">Възстанови</button>
+            </form>
+            {{else}}
+            <form method="post" action="/admin/activations/{{.ID}}/revoke" class="inline-form"
+                  x-data="confirmForm" data-confirm="Да се прекрати ли активацията?" @submit="confirm">
+              <input type="hidden" name="csrf_token" value="{{$.CSRF}}">
+              <button type="submit" class="btn btn-small">Прекрати</button>
+            </form>
+            {{end}}
+            <form method="post" action="/admin/activations/{{.ID}}/delete" class="inline-form"
+                  x-data="confirmForm" data-confirm="Активацията ще бъде изтрита безвъзвратно. Продължавате ли?" @submit="confirm">
+              <input type="hidden" name="csrf_token" value="{{$.CSRF}}">
+              <button type="submit" class="btn btn-small btn-danger">Изтрий</button>
+            </form>
+          </td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+  </div>
+  {{template "pagination" .Page}}
+  {{else}}
+  <p class="empty">Няма активации по този филтър.</p>
+  {{end}}
+</div>
+{{end}}

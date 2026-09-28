@@ -1,0 +1,52 @@
+{{/* The informational client list, shared by the home page and the request
+     form and swapped on its own by the htmx search box. Each client is a
+     heading row followed by its active activations, the same grouping as the
+     grouped Excel export. */}}
+{{define "client_list"}}
+<div id="client-list">
+  {{if .Clients}}
+  <div class="table-wrap">
+    <table>
+      <caption class="sr-only">Клиенти на магазините на потребителя и активните им модули</caption>
+      <thead>
+        <tr>
+          <th scope="col">Потребител</th>
+          <th scope="col">Модул</th>
+          <th scope="col">Ниво</th>
+          <th scope="col">От дата</th>
+          <th scope="col">До дата</th>
+          <th scope="col">Статус</th>
+        </tr>
+      </thead>
+      {{range .Clients}}
+      <tbody>
+        <tr class="group-head">
+          <th scope="rowgroup" colspan="6">
+            <span class="mono">{{.Code}}</span> — {{.Name}}
+            {{if .Object}}<span class="group-meta">Обект: {{.Object}}</span>{{end}}
+            {{if and .Store (ne .Store .Object)}}<span class="group-meta">Магазин: {{.Store}}</span>{{end}}
+          </th>
+        </tr>
+        {{range .Activations}}
+        <tr>
+          <td class="nowrap group-indent">{{.Username}}</td>
+          <td>{{moduleLabel .Module}}</td>
+          <td>{{tierLabel .Module .Tier}}</td>
+          <td class="nowrap">{{date .StartDate}}</td>
+          <td class="nowrap">{{date .EndDate}}</td>
+          <td>{{template "activation_badge" .Status}}</td>
+        </tr>
+        {{end}}
+      </tbody>
+      {{end}}
+    </table>
+  </div>
+  {{template "pagination" .ClientPage}}
+  {{else}}
+  <p class="empty">
+    {{if .Search}}Няма намерени клиенти с активни модули по това търсене.
+    {{else}}Няма клиенти с активни модули за вашите магазини.{{end}}
+  </p>
+  {{end}}
+</div>
+{{end}}

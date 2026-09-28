@@ -1,0 +1,11 @@
+{{define "content"}}
+<h1>{{.Title}}</h1>
+<p>{{.Message}}</p>
+<p class="center">
+  {{if .IsAdmin}}
+    <a class="btn" href="/admin">Към админ панела</a>
+  {{else}}
+    <a class="btn" href="/">Към началната страница</a>
+  {{end}}
+</p>
+{{end}}

@@ -1,0 +1,105 @@
+{{define "content"}}
+<div class="page-head">
+  <h1>{{if .IsNew}}Нов потребител{{else}}{{.Email}}{{end}}</h1>
+  <a class="btn" href="/admin/users">← Всички потребители</a>
+</div>
+
+{{template "errors" .Errors}}
+
+{{if .IsNew}}
+<div class="card">
+  <form method="post" action="/admin/users">
+    <input type="hidden" name="csrf_token" value="{{.CSRF}}">
+
+    <div class="field">
+      <label for="email">Имейл (потребителско име)</label>
+      <input type="email" id="email" name="email" value="{{.Email}}" required autofocus>
+    </div>
+
+    <div class="field">
+      <label for="password">Парола</label>
+      <input type="password" id="password" name="password" minlength="10"
+             autocomplete="new-password" required>
+      <p class="hint">Минимум 10 знака. Потребителят не може сам да я възстанови.</p>
+    </div>
+
+    <div class="check">
+      <input type="checkbox" id="must_change_password" name="must_change_password" value="1" checked>
+      <label for="must_change_password">Изискай смяна на паролата при първи вход</label>
+    </div>
+
+    <fieldset>
+      <legend>Магазини</legend>
+      {{if .Stores}}
+        {{range .Stores}}
+        <div class="check">
+          <input type="checkbox" id="store-{{.ID}}" name="stores" value="{{.ID}}"
+                 {{if index $.Selected .ID}}checked{{end}}>
+          <label for="store-{{.ID}}">{{.Name}} <span class="muted small">({{.ExternalValue}})</span></label>
+        </div>
+        {{end}}
+      {{else}}
+        <p class="alert alert-warning">Няма активни магазини. Създайте магазин първо.</p>
+      {{end}}
+    </fieldset>
+
+    <div class="form-actions">
+      <button type="submit" class="btn btn-primary">Създай</button>
+      <a class="btn" href="/admin/users">Отказ</a>
+    </div>
+  </form>
+</div>
+
+{{else}}
+
+<div class="card">
+  <h2 class="card-title">Магазини</h2>
+  <form method="post" action="/admin/users/{{.Target.ID}}">
+    <input type="hidden" name="csrf_token" value="{{.CSRF}}">
+    {{range .Stores}}
+    <div class="check {{if not .Active}}disabled{{end}}">
+      <input type="checkbox" id="store-{{.ID}}" name="stores" value="{{.ID}}"
+             {{if index $.Selected .ID}}checked{{end}}>
+      <label for="store-{{.ID}}">
+        {{.Name}} <span class="muted small">({{.ExternalValue}})</span>
+        {{if not .Active}}<span class="badge badge-expired">неактивен</span>{{end}}
+      </label>
+    </div>
+    {{end}}
+    <div class="form-actions">
+      <button type="submit" class="btn btn-primary">Запази магазините</button>
+    </div>
+  </form>
+</div>
+
+<div class="card">
+  <h2 class="card-title">Нулиране на парола</h2>
+  <form method="post" action="/admin/users/{{.Target.ID}}/password">
+    <input type="hidden" name="csrf_token" value="{{.CSRF}}">
+    <div class="field">
+      <label for="password">Нова парола</label>
+      <input type="password" id="password" name="password" minlength="10"
+             autocomplete="new-password" required>
+      <p class="hint">Минимум 10 знака. Всички сесии на потребителя ще бъдат прекратени.</p>
+    </div>
+    <div class="check">
+      <input type="checkbox" id="must_change_password" name="must_change_password" value="1" checked>
+      <label for="must_change_password">Изискай смяна при следващ вход</label>
+    </div>
+    <div class="form-actions">
+      <button type="submit" class="btn btn-primary">Смени паролата</button>
+    </div>
+  </form>
+</div>
+
+<div class="card">
+  <h2 class="card-title">Данни</h2>
+  <dl class="details">
+    <dt>Имейл</dt><dd>{{.Target.Email}}</dd>
+    <dt>Състояние</dt>
+    <dd>{{if .Target.Active}}Активен{{else}}Деактивиран{{end}}</dd>
+    <dt>Създаден</dt><dd>{{datetime .Target.CreatedAt}}</dd>
+  </dl>
+</div>
+{{end}}
+{{end}}

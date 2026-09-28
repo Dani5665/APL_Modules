@@ -1,0 +1,37 @@
+{{/* Expects a pagination value. Page links keep the current filters. */}}
+{{define "pagination"}}
+{{if gt .Total 0}}
+<nav class="pagination" aria-label="Страници">
+  <span>Показани {{.From}}–{{.To}} от {{.Total}}</span>
+  <span class="spacer"></span>
+  {{if .HasPrev}}
+    <a class="btn btn-small" href="{{queryString .Query "page" .Prev}}" rel="prev">← Предишна</a>
+  {{end}}
+  <span>Страница {{.Page}} от {{.Pages}}</span>
+  {{if .HasNext}}
+    <a class="btn btn-small" href="{{queryString .Query "page" .Next}}" rel="next">Следваща →</a>
+  {{end}}
+</nav>
+{{end}}
+{{end}}
+
+{{/* Status badge for an activation, given its computed status value. */}}
+{{define "activation_badge"}}
+<span class="badge badge-{{.}}">
+  {{if eq (printf "%s" .) "active"}}Активен
+  {{else if eq (printf "%s" .) "pending"}}Предстоящ
+  {{else if eq (printf "%s" .) "expired"}}Изтекъл
+  {{else if eq (printf "%s" .) "revoked"}}Прекратен
+  {{else}}Неизвестен{{end}}
+</span>
+{{end}}
+
+{{/* Status badge for a request. */}}
+{{define "request_badge"}}
+<span class="badge badge-{{.}}">
+  {{if eq (printf "%s" .) "pending"}}Чакащо
+  {{else if eq (printf "%s" .) "approved"}}Одобрено
+  {{else if eq (printf "%s" .) "denied"}}Отказано
+  {{else}}{{.}}{{end}}
+</span>
+{{end}}

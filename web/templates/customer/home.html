@@ -1,0 +1,41 @@
+{{define "content"}}
+<div class="page-head">
+  <div>
+    <h1>Клиенти на моите магазини</h1>
+    <p class="muted">
+      {{range $i, $s := .User.Stores}}{{if $i}}, {{end}}{{$s.Name}}{{else}}Няма зададени магазини.{{end}}
+    </p>
+  </div>
+</div>
+
+<div class="alert alert-info" role="status">
+  Запитванията за активация се започват от основното приложение — отворете
+  клиента там и използвайте бутона за заявка.
+</div>
+
+{{if .ClientsUnavailable}}
+<div class="alert alert-error" role="alert">
+  Списъкът с клиенти не може да бъде зареден в момента. Опитайте отново по-късно.
+</div>
+{{end}}
+
+<div class="card">
+  <h2 class="card-title">Клиенти с активни модули</h2>
+  <p class="hint">Показват се само клиенти, на които има поне един активен модул.</p>
+
+  <div class="field">
+    <label for="client-search">Търсене по клиентски номер, име, обект или потребител</label>
+    <input type="search" id="client-search" name="q" value="{{.Search}}"
+           placeholder="Например 100000001 или Балкан"
+           hx-get="/clients"
+           hx-trigger="input changed delay:300ms, search"
+           hx-target="#client-list"
+           hx-select="#client-list"
+           hx-swap="outerHTML"
+           hx-indicator="#client-search-indicator">
+    <span id="client-search-indicator" class="htmx-indicator hint">Търсене…</span>
+  </div>
+
+  {{template "client_list" .}}
+</div>
+{{end}}

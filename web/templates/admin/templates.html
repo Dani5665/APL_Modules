@@ -1,0 +1,46 @@
+{{define "content"}}
+<div class="page-head">
+  <h1>Имейл шаблони</h1>
+</div>
+
+<div class="alert alert-info" role="status">
+  Променливите се заместват като обикновен текст и се екранират, така че
+  съдържанието на шаблона не може да изпълнява код. Непознати променливи остават
+  непроменени в текста.
+</div>
+
+<div class="card">
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th scope="col">Шаблон</th>
+          <th scope="col">Тема</th>
+          <th scope="col">Състояние</th>
+          <th scope="col">Променен</th>
+          <th scope="col"></th>
+        </tr>
+      </thead>
+      <tbody>
+        {{range .Templates}}
+        <tr>
+          <td>
+            <strong>{{.Def.Label}}</strong>
+            <div class="hint">{{.Def.Description}}</div>
+          </td>
+          <td class="small">{{if .Stored}}{{.Stored.Subject}}{{else}}{{.Def.DefaultSubject}}{{end}}</td>
+          <td>
+            {{if .IsCustom}}<span class="badge badge-pending">променен</span>
+            {{else}}<span class="badge badge-expired">по подразбиране</span>{{end}}
+          </td>
+          <td class="nowrap small">{{if .Stored}}{{datetime .Stored.UpdatedAt}}{{end}}</td>
+          <td class="nowrap">
+            <a class="btn btn-small" href="/admin/settings/templates/{{.Def.Key}}">Редакция</a>
+          </td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+  </div>
+</div>
+{{end}}

@@ -1,0 +1,29 @@
+{{define "content"}}
+<h1>Настройка на двуфакторна автентикация</h1>
+
+<p>
+  Сканирайте кода с приложение за автентикация (Google Authenticator, Authy,
+  1Password и подобни) и въведете показания шестцифрен код.
+</p>
+
+{{if .Error}}<div class="alert alert-error" role="alert">{{.Error}}</div>{{end}}
+
+<img class="qr" src="{{.QRDataURI}}" width="240" height="240"
+     alt="QR код за настройка на двуфакторна автентикация">
+
+<p class="hint">Ако не можете да сканирате кода, въведете тайния ключ ръчно:</p>
+<p class="code-block">{{.ManualEntry}}</p>
+
+<form method="post" action="/admin/login/enroll" class="stack">
+  <input type="hidden" name="csrf_token" value="{{.CSRF}}">
+  <input type="hidden" name="secret" value="{{.Secret}}">
+
+  <div class="field">
+    <label for="code">Код от приложението</label>
+    <input type="text" id="code" name="code" inputmode="numeric" pattern="[0-9]*"
+           maxlength="6" autocomplete="one-time-code" required autofocus>
+  </div>
+
+  <button type="submit" class="btn btn-primary btn-block">Потвърди</button>
+</form>
+{{end}}

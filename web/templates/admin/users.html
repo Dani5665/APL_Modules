@@ -1,0 +1,89 @@
+{{define "content"}}
+<div class="page-head">
+  <h1>Потребители (търговци)</h1>
+  <a class="btn btn-primary" href="/admin/users/new">Нов потребител</a>
+</div>
+
+<div class="card">
+  <form class="filters" method="get" action="/admin/users"
+        hx-get="/admin/users?partial=1"
+        hx-trigger="input changed delay:300ms from:input[type=search], change"
+        hx-target="#user-table"
+        hx-select="#user-table"
+        hx-swap="outerHTML">
+    <div class="field">
+      <label for="q">Търсене по имейл</label>
+      <input type="search" id="q" name="q" value="{{.Filter.Search}}">
+    </div>
+    <div class="field field-narrow">
+      <label for="store">Магазин</label>
+      <select id="store" name="store">
+        <option value="">Всички</option>
+        {{range .Stores}}
+        <option value="{{.ID}}" {{if eq $.StoreID .ID}}selected{{end}}>{{.Name}}</option>
+        {{end}}
+      </select>
+    </div>
+    <div class="field field-narrow">
+      <button type="submit" class="btn">Филтрирай</button>
+    </div>
+  </form>
+
+  {{template "user_table" .}}
+</div>
+{{end}}
+
+{{define "user_table"}}
+<div id="user-table">
+  {{if .Users}}
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th scope="col">Имейл</th>
+          <th scope="col">Магазини</th>
+          <th scope="col">Състояние</th>
+          <th scope="col">Създаден</th>
+          <th scope="col"></th>
+        </tr>
+      </thead>
+      <tbody>
+        {{range .Users}}
+        <tr>
+          <td>{{.Email}}</td>
+          <td class="small">
+            {{range $i, $s := .Stores}}{{if $i}}, {{end}}{{$s.Name}}{{else}}<span class="muted">—</span>{{end}}
+          </td>
+          <td>
+            {{if .Active}}<span class="badge badge-active">Активен</span>
+            {{else}}<span class="badge badge-revoked">Деактивиран</span>{{end}}
+            {{if .MustChangePassword}}<br><span class="badge badge-pending">Смяна на парола</span>{{end}}
+          </td>
+          <td class="nowrap small">{{datetime .CreatedAt}}</td>
+          <td class="nowrap">
+            <a class="btn btn-small" href="/admin/users/{{.ID}}">Редакция</a>
+            <form method="post" action="/admin/users/{{.ID}}/active" class="inline-form">
+              <input type="hidden" name="csrf_token" value="{{$.CSRF}}">
+              {{if .Active}}
+                <button type="submit" class="btn btn-small">Деактивирай</button>
+              {{else}}
+                <input type="hidden" name="active" value="1">
+                <button type="submit" class="btn btn-small">Активирай</button>
+              {{end}}
+            </form>
+            <form method="post" action="/admin/users/{{.ID}}/delete" class="inline-form"
+                  x-data="confirmForm" data-confirm="Потребителят ще бъде изтрит. Продължавате ли?" @submit="confirm">
+              <input type="hidden" name="csrf_token" value="{{$.CSRF}}">
+              <button type="submit" class="btn btn-small btn-danger">Изтрий</button>
+            </form>
+          </td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+  </div>
+  {{else}}
+  <p class="empty">Няма потребители по този филтър.</p>
+  {{end}}
+</div>
+{{end}}

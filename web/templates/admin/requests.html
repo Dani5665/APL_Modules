@@ -1,0 +1,96 @@
+{{define "content"}}
+<div class="page-head">
+  <h1>Запитвания</h1>
+</div>
+
+<div class="card">
+  <form class="filters" method="get" action="/admin/requests"
+        hx-get="/admin/requests?partial=1"
+        hx-trigger="input changed delay:300ms from:input[type=search], change"
+        hx-target="#request-table"
+        hx-select="#request-table"
+        hx-swap="outerHTML">
+    <div class="field field-narrow">
+      <label for="status">Статус</label>
+      <select id="status" name="status">
+        <option value="">Всички</option>
+        {{range $.Statuses}}
+        <option value="{{.}}" {{if eq $.Filter.Status .}}selected{{end}}>{{.Label}}</option>
+        {{end}}
+      </select>
+    </div>
+
+    <div class="field">
+      <label for="q">Търсене</label>
+      <input type="search" id="q" name="q" value="{{.Filter.Search}}"
+             placeholder="Клиентски номер, име или подател">
+    </div>
+
+    <div class="field field-narrow">
+      <label for="from">От дата</label>
+      <input type="date" id="from" name="from" value="{{.Filter.FromDate}}">
+    </div>
+
+    <div class="field field-narrow">
+      <label for="to">До дата</label>
+      <input type="date" id="to" name="to" value="{{.Filter.ToDate}}">
+    </div>
+
+    <div class="field field-narrow">
+      <button type="submit" class="btn">Филтрирай</button>
+    </div>
+  </form>
+
+  {{template "request_table" .}}
+</div>
+{{end}}
+
+{{define "request_table"}}
+<div id="request-table">
+  {{if .Requests}}
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th scope="col">№</th>
+          <th scope="col">Подадено</th>
+          <th scope="col">Клиент</th>
+          <th scope="col">Потребители</th>
+          <th scope="col">Модули</th>
+          <th scope="col">Период</th>
+          <th scope="col">Подател</th>
+          <th scope="col">Статус</th>
+          <th scope="col"></th>
+        </tr>
+      </thead>
+      <tbody>
+        {{range .Requests}}
+        <tr>
+          <td class="numeric">{{.ID}}</td>
+          <td class="nowrap">{{datetime .CreatedAt}}</td>
+          <td>
+            <div class="mono small">{{.ClientCode}}</div>
+            <div>{{.ClientName}}</div>
+          </td>
+          <td class="small">{{join ", " .Usernames}}</td>
+          <td class="small">
+            {{range $i, $m := .Modules}}{{if $i}}, {{end}}{{describeModule $m.Module $m.Tier}}{{end}}
+            {{if .TestPeriod}}<br><span class="badge badge-pending">Тест период</span>{{end}}
+          </td>
+          <td class="nowrap small">{{date .StartDate}} — {{date .EndDate}}<br>{{.DurationLabel}}</td>
+          <td class="small">{{.SubmitterEmail}}</td>
+          <td>{{template "request_badge" .Status}}</td>
+          <td class="nowrap">
+            <a class="btn btn-small" href="/admin/requests/{{.ID}}">Отвори</a>
+          </td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+  </div>
+  {{template "pagination" .Page}}
+  {{else}}
+  <p class="empty">Няма запитвания по този филтър.</p>
+  {{end}}
+</div>
+{{end}}
