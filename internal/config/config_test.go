@@ -100,23 +100,14 @@ func TestLoadRequiresEntryLinkSecretWhenSigningEnabled(t *testing.T) {
 	}
 }
 
-// TestLoadRefusesToDisableEntryLinkSigningAgainstMSSQL is the same safety
-// rail as 2FA: unsigned entry links may only be used for local/dev testing
-// against the mock directory, never against a real deployment.
-func TestLoadRefusesToDisableEntryLinkSigningAgainstMSSQL(t *testing.T) {
+// TestLoadAllowsEntryLinkSigningDisabledAgainstMSSQL is unlike the 2FA
+// safety rail: a deployment may deliberately run unsigned entry links
+// against a real external directory, e.g. because the parent application
+// does not sign its links - see README.md, "Entry link format".
+func TestLoadAllowsEntryLinkSigningDisabledAgainstMSSQL(t *testing.T) {
 	env := baseEnv()
 	env["EXTERNAL_DB_MODE"] = "mssql"
 	env["MSSQL_DSN"] = "sqlserver://user:pass@host:1433?database=db"
-	env["ENTRY_LINK_SIGNING_ENABLED"] = "false"
-	withEnv(t, env)
-
-	if _, err := Load(); err == nil {
-		t.Fatal("Load accepted ENTRY_LINK_SIGNING_ENABLED=false with EXTERNAL_DB_MODE=mssql")
-	}
-}
-
-func TestLoadAllowsEntryLinkSigningDisabledInMockMode(t *testing.T) {
-	env := baseEnv()
 	env["ENTRY_LINK_SIGNING_ENABLED"] = "false"
 	env["ENTRY_LINK_SECRET"] = ""
 	withEnv(t, env)

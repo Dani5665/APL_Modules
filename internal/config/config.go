@@ -129,15 +129,15 @@ func Load() (Config, error) {
 		}
 	}
 
+	// Unlike Admin2FAEnabled, this is not restricted to EXTERNAL_DB_MODE=mock:
+	// the parent application may simply not sign its entry links, which is a
+	// deliberate per-deployment choice rather than a dev-only convenience -
+	// see README.md, "Entry link format".
 	signingEnabled, err := boolOr("ENTRY_LINK_SIGNING_ENABLED", true)
 	if err != nil {
 		fail("ENTRY_LINK_SIGNING_ENABLED: %v", err)
 	}
 	c.EntryLinkSigningEnabled = signingEnabled
-	if !c.EntryLinkSigningEnabled && c.ExternalMode == ExternalMSSQL {
-		fail("ENTRY_LINK_SIGNING_ENABLED=false is only allowed with EXTERNAL_DB_MODE=mock; " +
-			"entry links must stay signed against a real deployment")
-	}
 	if raw := strings.TrimSpace(os.Getenv("ENTRY_LINK_SECRET")); raw != "" {
 		key, err := decodeBase64(raw)
 		if err != nil {

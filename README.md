@@ -189,7 +189,7 @@ message listing every problem at once.
 | `MSSQL_DSN` | — | Required when `EXTERNAL_DB_MODE=mssql`. |
 | `APP_ENCRYPTION_KEY` | — | **Required.** 32 random bytes, base64. |
 | `ENTRY_LINK_SECRET` | — | **Required** unless `ENTRY_LINK_SIGNING_ENABLED=false`. At least 16 random bytes, base64. See [Entry link format](#entry-link-format). |
-| `ENTRY_LINK_SIGNING_ENABLED` | `true` | Same safety rail as `ADMIN_2FA_ENABLED`: may only be `false` with `EXTERNAL_DB_MODE=mock`. |
+| `ENTRY_LINK_SIGNING_ENABLED` | `true` | Set `false` if the parent application doesn't sign its links — allowed with any `EXTERNAL_DB_MODE`, unlike `ADMIN_2FA_ENABLED`. |
 | `SESSION_IDLE_TIMEOUT` | `2h` | |
 | `SESSION_ABSOLUTE_TIMEOUT` | `12h` | Must be at least the idle timeout. |
 | `COOKIE_SECURE` | `true` | Set `false` only for local plain HTTP. See [Reverse proxy](#reverse-proxy). |
@@ -433,11 +433,17 @@ least 16 random bytes, base64-encoded — generate one the same way, e.g.
 the parent application. Rotating it invalidates every link signed with the
 old value; there is no overlap period.
 
-**For local testing without the parent application**, either:
-- set `ENTRY_LINK_SIGNING_ENABLED=false` (only permitted with
-  `EXTERNAL_DB_MODE=mock`, enforced the same way as `ADMIN_2FA_ENABLED`) to
-  fall back to plain, unsigned `GET /r/{code}/{login}` links, or
-- keep signing on and generate a real link with the bundled tool:
+**If the parent application does not sign its links**, set
+`ENTRY_LINK_SIGNING_ENABLED=false` to fall back to plain, unsigned
+`GET /r/{code}/{login}` links instead. Unlike `ADMIN_2FA_ENABLED`, this is
+allowed with `EXTERNAL_DB_MODE=mssql` too — it is a deliberate choice about
+what the parent application actually sends, not a dev-only convenience. A
+signed link is still the more defensible default where it's an option: it
+can't be replayed past its expiry or guessed, which a plain
+`{code}`/`{login}` pair can be.
+
+**For local testing without the parent application** (with signing left on),
+generate a real link with the bundled tool:
   ```bash
   docker compose exec app /app sign-link 000050431 YordanVuchkov 10m
   ```
