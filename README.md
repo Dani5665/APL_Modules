@@ -406,8 +406,8 @@ front of it, must:
 2. **Listen on 443, terminate TLS, and forward to `http://127.0.0.1:8090`**,
    forwarding `Host`, and setting `X-Forwarded-For` and `X-Forwarded-Proto` so
    the application can see the real client address and scheme. A commented
-   nginx server block with exactly this is in `docker-compose.yml`; a Caddy
-   `Caddyfile` needs only:
+   nginx server block with exactly this, and a commented Traefik label set,
+   are both in `docker-compose.yml`; a Caddy `Caddyfile` needs only:
    ```
    clm.autoplus.bg {
        reverse_proxy 127.0.0.1:8090
@@ -415,6 +415,18 @@ front of it, must:
    ```
    (Caddy obtains and renews the certificate itself and sets the forwarding
    headers by default.)
+
+   **Traefik also works**, and like Caddy handles the certificate itself
+   (via its ACME `certresolver`) — no separate `certbot` to manage. It is the
+   one case here where the proxy reaches the app over the Docker network
+   instead of a published host port: join `app` to Traefik's external
+   network, add `traefik.enable=true` and routing labels (both commented
+   in `docker-compose.yml`), and remove the `ports:` block so the container
+   is reachable only through Traefik. Because the request then genuinely
+   arrives from Traefik's own container address rather than `127.0.0.1`,
+   `TRUSTED_PROXY_CIDRS` has to be that Docker network's subnet, not the
+   loopback addresses below — see the comment in `docker-compose.yml` for how
+   to find it.
 3. **Redirect plain HTTP (port 80) to HTTPS.** With `COOKIE_SECURE=true` (the
    default, and what this deployment should run with — see below) the session
    cookie is never sent over a plain HTTP connection, so an admin or

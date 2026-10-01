@@ -13,6 +13,10 @@ services:
       # Host port 8090 here only because 8080 is taken by another project on
       # this machine during local testing; change back to 8080:8080 (and
       # APP_BASE_URL in .env) for a normal deployment.
+      #
+      # Using Traefik instead? Remove this `ports:` block entirely (Traefik
+      # reaches the container over the Docker network below, not the host
+      # port) and see the Traefik example further down.
       - "127.0.0.1:8090:8080"
     healthcheck:
       test: ["CMD", "/app", "healthcheck"]
@@ -25,6 +29,17 @@ services:
       options:
         max-size: "10m"
         max-file: "5"
+    # --- Traefik instead of nginx/Caddy: uncomment this block, remove the
+    # `ports:` block above, and join `app` to Traefik's external network (see
+    # the `networks:` section at the bottom of this file).
+    # labels:
+    #   - "traefik.enable=true"
+    #   - "traefik.http.routers.moduli.rule=Host(`clm.autoplus.bg`)"
+    #   - "traefik.http.routers.moduli.entrypoints=websecure"
+    #   - "traefik.http.routers.moduli.tls.certresolver=letsencrypt"
+    #   - "traefik.http.services.moduli.loadbalancer.server.port=8080"
+    # networks:
+    #   - proxy
 
   # A reverse proxy terminates TLS and forwards to the app. Example nginx
   # server block:
@@ -47,6 +62,31 @@ services:
   #
   # Set TRUSTED_PROXY_CIDRS to the proxy's address range, otherwise
   # X-Forwarded-For is ignored and every client looks like the proxy.
+  #
+  # --- Traefik instead: Traefik already sets X-Forwarded-For and
+  # X-Forwarded-Proto correctly on its own, nothing to configure on that
+  # side. It discovers `app` through the labels above over the shared
+  # `proxy` network (see below) rather than through a published host port,
+  # so remove the `ports:` block above - the container is then not reachable
+  # from the host at all except through Traefik, which is the point.
+  #
+  # Because Traefik is itself a container, the app sees requests arriving
+  # from Traefik's address *on that Docker network*, not from 127.0.0.1 - so
+  # TRUSTED_PROXY_CIDRS must be that network's subnet, not 127.0.0.1/32. Find
+  # it with `docker network inspect proxy` (look for "Subnet") once the
+  # network below exists, and put it in .env.
+  #
+  # This assumes Traefik itself is already running elsewhere on this host
+  # with its own docker-compose.yml, an entrypoint named `websecure` on 443,
+  # and a certresolver named `letsencrypt` already configured for ACME - this
+  # project does not run Traefik itself, only joins its network.
 
 volumes:
   app-data:
+
+# Uncomment alongside the Traefik labels above. `external: true` because the
+# network is created by Traefik's own compose file, not this one; this
+# project only attaches to it.
+# networks:
+#   proxy:
+#     external: true
