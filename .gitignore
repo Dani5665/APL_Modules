@@ -4,6 +4,7 @@
 *.db
 *.db-wal
 *.db-shm
+AppLaunch.readme
 
 # Build output
 /app
