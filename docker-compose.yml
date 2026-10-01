@@ -29,7 +29,7 @@ services:
     # for ACME; adjust both labels below if yours are named differently.
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.moduli.rule=Host(`clm.autoplus.bg`)"
+      - "traefik.http.routers.moduli.rule=Host(`apl-clm.autoplus.bg`)"
       - "traefik.http.routers.moduli.entrypoints=websecure"
       - "traefik.http.routers.moduli.tls.certresolver=letsencrypt"
       - "traefik.http.services.moduli.loadbalancer.server.port=8080"
