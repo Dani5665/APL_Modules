@@ -94,10 +94,17 @@ belongs to a store the account does not cover.
 
 ## Running with Docker
 
+`docker-compose.yml` attaches the app to an external Docker network named
+`proxy`, which Traefik's own compose setup is expected to create (see
+[Reverse proxy](#reverse-proxy)) — `docker compose up` fails with a clear
+"network proxy declared as external, but could not be found" error if that
+network does not exist yet. Create it once yourself
+(`docker network create proxy`) if Traefik isn't already providing it.
+
 ```bash
 cp .env.example .env
-# Edit .env. At minimum set APP_BASE_URL, APP_ENCRYPTION_KEY, MSSQL_DSN
-# and the two BOOTSTRAP_ADMIN_* variables.
+# Edit .env. At minimum set APP_BASE_URL, APP_ENCRYPTION_KEY, ENTRY_LINK_SECRET,
+# MSSQL_DSN, TRUSTED_PROXY_CIDRS and the two BOOTSTRAP_ADMIN_* variables.
 
 docker compose up -d --build
 docker compose logs -f app
@@ -395,75 +402,49 @@ old value; there is no overlap period.
 
 ## Reverse proxy
 
-TLS is terminated by an existing reverse proxy; the container serves plain
-HTTP on `127.0.0.1:8090` (see `docker-compose.yml`'s port mapping). **This
-application does not terminate TLS itself** — something else on the host, in
-front of it, must:
+TLS is terminated by **Traefik**, which this project assumes is already
+running elsewhere on the host (its own `docker-compose.yml`, not part of this
+one) with an entrypoint named `websecure` on 443 and a certresolver named
+`letsencrypt` configured for ACME. **This application does not terminate TLS
+itself** and serves plain HTTP only.
 
-1. **Obtain a certificate** for the public domain (e.g. `clm.autoplus.bg`) —
-   Let's Encrypt via `certbot` or the proxy's own ACME support are the usual
-   choices.
-2. **Listen on 443, terminate TLS, and forward to `http://127.0.0.1:8090`**,
-   forwarding `Host`, and setting `X-Forwarded-For` and `X-Forwarded-Proto` so
-   the application can see the real client address and scheme. A commented
-   nginx server block with exactly this, and a commented Traefik label set,
-   are both in `docker-compose.yml`; a Caddy `Caddyfile` needs only:
-   ```
-   clm.autoplus.bg {
-       reverse_proxy 127.0.0.1:8090
-   }
-   ```
-   (Caddy obtains and renews the certificate itself and sets the forwarding
-   headers by default.)
+`docker-compose.yml` has no `ports:` entry at all: Traefik reaches the `app`
+container over a shared Docker network, declared there as an `external`
+network named `proxy`, rather than through a published host port — so the
+container is not reachable from the host, only through Traefik. Routing is
+configured entirely through the `traefik.*` labels already on the `app`
+service; if your Traefik instance's entrypoint or certresolver are named
+differently, edit those two labels to match.
 
-   **Traefik also works**, and like Caddy handles the certificate itself
-   (via its ACME `certresolver`) — no separate `certbot` to manage. It is the
-   one case here where the proxy reaches the app over the Docker network
-   instead of a published host port: join `app` to Traefik's external
-   network, add `traefik.enable=true` and routing labels (both commented
-   in `docker-compose.yml`), and remove the `ports:` block so the container
-   is reachable only through Traefik. Because the request then genuinely
-   arrives from Traefik's own container address rather than `127.0.0.1`,
-   `TRUSTED_PROXY_CIDRS` has to be that Docker network's subnet, not the
-   loopback addresses below — see the comment in `docker-compose.yml` for how
-   to find it.
-3. **Redirect plain HTTP (port 80) to HTTPS.** With `COOKIE_SECURE=true` (the
-   default, and what this deployment should run with — see below) the session
-   cookie is never sent over a plain HTTP connection, so an admin or
-   salesperson who reaches the site over `http://` transparently cannot log
-   in at all until they are redirected to `https://`.
-4. **Set `TRUSTED_PROXY_CIDRS`** to the proxy's address range (see below).
+**Set `TRUSTED_PROXY_CIDRS`.** Because Traefik is itself a container, the app
+sees every request arriving from Traefik's own address *on the `proxy`
+network*, not from `127.0.0.1`. Find that network's subnet once it exists
+with:
+```
+docker network inspect proxy
+```
+(look for `"Subnet"`) and put it in `.env`:
+```
+TRUSTED_PROXY_CIDRS=<that subnet>
+```
+This matters for exactly one thing: the per-IP login lockout (5 failures →
+15-minute lockout). The real client address is only known through the
+`X-Forwarded-For` header Traefik sets (it does this correctly by default,
+nothing to configure there), and that header is only honoured when it is
+known to come from somewhere trustworthy — otherwise anyone could put an
+arbitrary value in it and either evade the lockout or lock out someone else's
+address. With `TRUSTED_PROXY_CIDRS` left at its empty default, the header is
+ignored outright and every request is treated as coming from Traefik's own
+address instead — safe, but it makes the lockout apply to *all* logins
+through Traefik collectively rather than to each real client separately, so a
+handful of failed attempts from anyone could briefly lock out everyone.
 
 **What `COOKIE_SECURE` does:** it sets the `Secure` attribute on the session
 cookie, which tells the browser to attach that cookie only to `https://`
 requests, never to a plain `http://` one. Leave it at its default `true` once
-a reverse proxy with a real certificate is in front of the application (step 3
-above handles the case where someone still types `http://`); only set it
-`false` for local development without HTTPS, e.g. testing directly against
-`http://localhost:8090` with no proxy at all — which is exactly the setup this
-project's own Quick start and `docker-compose.yml` use today.
-
-**Is `TRUSTED_PROXY_CIDRS` really needed?** It matters for exactly one thing:
-the per-IP login lockout (5 failures → 15-minute lockout). Every request this
-application receives, proxied or not, arrives from the proxy's own address —
-the real client address is only known through the `X-Forwarded-For` header
-the proxy sets, and that header is meaningless unless it is known to come from
-something trustworthy, since anyone could otherwise put an arbitrary value in
-it and impersonate any address (including evading the lockout entirely, or
-locking out someone else's address). With `TRUSTED_PROXY_CIDRS` empty (the
-default), the header is ignored outright and every request is treated as
-coming from the proxy's address — safe, but it makes the lockout apply to
-*all* logins through that proxy collectively rather than to each real client
-separately, so a handful of failed attempts from anyone could briefly lock out
-everyone. If the reverse proxy runs directly on the same host as this
-container (matching the `127.0.0.1:8090` binding in `docker-compose.yml`,
-which is the setup this project ships with), set:
-```
-TRUSTED_PROXY_CIDRS=127.0.0.1/32,::1/128
-```
-If the proxy instead runs in its own container on the Docker network, use
-that network's actual subnet (`docker network inspect <name>` shows it)
-instead of the loopback addresses above.
+Traefik with a real certificate is in front of the application; only set it
+`false` for local development without HTTPS and without Traefik at all, e.g.
+testing directly against a container with a published port on `localhost`.
 
 The application sets `Content-Security-Policy` (same-origin only, no
 `unsafe-eval` — Alpine ships in its CSP build),
