@@ -98,42 +98,65 @@ belongs to a store the account does not cover.
 local build.** `.github/workflows/docker-publish.yml` builds and pushes
 `ghcr.io/dani5665/apl_modules` on every push to `master` (after `go vet`,
 staticcheck, govulncheck and `go test` all pass — the image is never
-published otherwise), and `docker-compose.yml`'s `app` service runs that
-image by name. A production host only ever needs to:
+published otherwise). Two compose files run that image, for two different
+situations:
+
+- **`docker-compose-deploy.yml`** — for an actual deployment, on a remote
+  server that has no copy of this repository's source and has no need of
+  one. Copy just this file and a filled-in `.env` (see below) to the server
+  and that is the entire deployment artifact; there is no `build:` key in it
+  at all, so nothing there can accidentally deploy a locally-built image
+  instead of the one CI tested. This is also the file `AppLaunch.readme`
+  (a local, gitignored runbook — ask Yordan for a copy, it is not in this
+  repository since it carries real deployment secrets) walks through step by
+  step.
+- **`docker-compose.yml`** — for local development against this project's
+  own `Dockerfile`. It carries the same `image:` as above, but also a
+  `build:` path, so `docker compose up -d --build` builds and tags locally
+  under that same name instead of pulling it, with no registry login needed.
+  This is how this project's own local testing works.
+
+Either way, a production host only ever needs:
 
 ```bash
 cp .env.example .env
 # Edit .env. At minimum set APP_BASE_URL, APP_ENCRYPTION_KEY, ENTRY_LINK_SECRET,
 # MSSQL_DSN, TRUSTED_PROXY_CIDRS and the two BOOTSTRAP_ADMIN_* variables.
 
-docker compose pull
-docker compose up -d
-docker compose logs -f app
+docker compose -f docker-compose-deploy.yml pull
+docker compose -f docker-compose-deploy.yml up -d
+docker compose -f docker-compose-deploy.yml logs -f app
 ```
 
-The `ghcr.io/dani5665/apl_modules` package is private, same as the repo:
-`docker compose pull` needs `docker login ghcr.io` first with a personal
-access token that has the `read:packages` scope, and that account needs to
-actually be granted access to the package (repo collaborators usually
-inherit it; otherwise grant it directly under the package's own settings).
+The `ghcr.io/dani5665/apl_modules` package is private, same as the repo: the
+`pull` above needs `docker login ghcr.io` first with a personal access token
+that has the `read:packages` scope, and that account needs to actually be
+granted access to the package (repo collaborators usually inherit it;
+otherwise grant it directly under the package's own settings).
 
-`docker-compose.yml` also attaches the app to an external Docker network
-named `proxy`, which Traefik's own compose setup is expected to create (see
+Both compose files attach the app to an external Docker network named
+`proxy`, which Traefik's own compose setup is expected to create (see
 [Reverse proxy](#reverse-proxy)) — `docker compose up` fails with a clear
 "network proxy declared as external, but could not be found" error if that
 network does not exist yet. Create it once yourself
 (`docker network create proxy`) if Traefik isn't already providing it.
 
-**For local development against this same `Dockerfile`** (no registry login
-needed), `build:` is still in `docker-compose.yml` alongside `image:`, so
-`docker compose up -d --build` builds and tags locally under that same image
-name instead of pulling it — this is how this project's own local testing
-works. Never pass `--build` on a production host; that would silently start
-running a locally-built image instead of the one CI tested.
+Don't run both compose files from the same directory on the same host:
+Compose infers a project name from the directory by default, and both files
+define an `app` service under that project, so the second `up` recreates the
+first one's container in place rather than running alongside it. Harmless
+(both point at the same `/data` volume either way) but surprising if you
+aren't expecting it — give one an explicit `-p <name>` if you ever
+genuinely need both at once.
+
+Never pass `--build` on a production host - that would silently start
+running a locally-built image instead of the one CI tested; it also has no
+effect in `docker-compose-deploy.yml`, which has no `build:` key to begin
+with.
 
 The image builds on `golang:1.27-alpine` with `CGO_ENABLED=0` and runs on
 `gcr.io/distroless/static-debian12:nonroot` as a non-root user. The binary is
-about 19 MB, so the image lands around 21 MB. `docker-compose.yml` hardens it
+about 19 MB, so the image lands around 21 MB. Both compose files harden it
 further at the container level: a read-only root filesystem (with `/tmp`
 writable, in case the Go runtime ever wants scratch space — the application
 itself writes nothing outside `/data`), every Linux capability dropped,
@@ -433,13 +456,14 @@ one) with an entrypoint named `websecure` on 443 and a certresolver named
 `letsencrypt` configured for ACME. **This application does not terminate TLS
 itself** and serves plain HTTP only.
 
-`docker-compose.yml` has no `ports:` entry at all: Traefik reaches the `app`
-container over a shared Docker network, declared there as an `external`
-network named `proxy`, rather than through a published host port — so the
-container is not reachable from the host, only through Traefik. Routing is
-configured entirely through the `traefik.*` labels already on the `app`
-service; if your Traefik instance's entrypoint or certresolver are named
-differently, edit those two labels to match.
+Neither `docker-compose.yml` nor `docker-compose-deploy.yml` has a `ports:`
+entry: Traefik reaches the `app` container over a shared Docker network,
+declared in both files as an `external` network named `proxy`, rather than
+through a published host port — so the container is not reachable from the
+host, only through Traefik. Routing is configured entirely through the
+`traefik.*` labels already on the `app` service; if your Traefik instance's
+entrypoint or certresolver are named differently, edit those two labels to
+match (in `docker-compose-deploy.yml` for an actual deployment).
 
 **Set `TRUSTED_PROXY_CIDRS`.** Because Traefik is itself a container, the app
 sees every request arriving from Traefik's own address *on the `proxy`
@@ -626,7 +650,7 @@ internal/config/    environment configuration and validation
 internal/dates/     Europe/Sofia calendar arithmetic
 internal/demo/      seeded demo data (mock mode only)
 internal/email/     SMTP, templates, placeholders, the outbox worker
-internal/entrylink/ the entry-link parser              (PLACEHOLDER-A)
+internal/entrylink/ the signed entry-link parser
 internal/export/    the Excel generator
 internal/external/  the read-only external directory: interface, mssql/, mock/
 internal/http/      router, middleware, customer and admin handlers
