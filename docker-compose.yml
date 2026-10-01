@@ -1,12 +1,59 @@
 services:
   app:
+    # Built and published by .github/workflows/docker-publish.yml on every
+    # push to master - this is the GitHub Actions-tested image, not a local
+    # build, so production never runs anything CI hasn't already run
+    # `go vet`/staticcheck/govulncheck/`go test` against. Pin IMAGE_TAG in
+    # .env to an immutable tag (a commit SHA, or a `vX.Y.Z` release tag) for
+    # a deployment that only changes when you deliberately bump it; the
+    # default `latest` always tracks the newest build on master.
+    #
+    # `build:` stays here only for local development against this same
+    # Dockerfile (`docker compose up -d --build`, which builds and tags
+    # under the `image:` name below instead of pulling it, so it still
+    # works with no registry login). A production host should never pass
+    # `--build` - plain `docker compose pull && docker compose up -d` (or
+    # just `up -d`, since pull_policy below already pulls on every run) is
+    # what actually runs the GitHub Actions-built image.
     build: .
-    image: moduli-zayavki:latest
+    image: ghcr.io/dani5665/apl_modules:${IMAGE_TAG:-latest}
+    pull_policy: always
     restart: unless-stopped
     env_file: .env
+
+    # Hardening: the app writes nothing outside /data (the one volume below)
+    # - no local temp files, nothing cached to disk elsewhere - so the rest
+    # of the filesystem can be read-only. /tmp is still writable in case the
+    # Go runtime itself ever wants scratch space; the app does not use it.
+    # Verified this combination still starts and passes its own healthcheck
+    # before committing it.
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+
+    # The container already runs as non-root (distroless's fixed nonroot
+    # user, baked into the image) and needs no capability at all - it binds
+    # an unprivileged port and does nothing else that caps would gate.
+
     volumes:
       # SQLite, its WAL files and the daily backups live here.
       - app-data:/data
+
+    # Sized well above the application's own stated idle footprint (well
+    # under 50 MB) to leave headroom for the SQLite page cache and a burst
+    # of concurrent requests, while still catching a real leak instead of
+    # letting it consume the whole host. Adjust if real usage says otherwise
+    # - there's no load testing behind this starting point.
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: "1.0"
+
     healthcheck:
       test: ["CMD", "/app", "healthcheck"]
       interval: 30s
@@ -18,11 +65,12 @@ services:
       options:
         max-size: "10m"
         max-file: "5"
+
     # TLS is terminated by Traefik, running elsewhere on this host with its
-    # own docker-compose.yml (not part of this project). No `ports:` here on
-    # purpose: Traefik reaches this container over the shared `proxy` Docker
-    # network below, so the app is not reachable from the host at all except
-    # through it.
+    # own docker-compose.yml (not part of this project). No published port
+    # here on purpose: Traefik reaches this container over the shared
+    # `proxy` Docker network below, so the app is not reachable from the
+    # host at all except through it.
     #
     # Assumes that Traefik instance already has an entrypoint named
     # `websecure` on 443 and a certresolver named `letsencrypt` configured

@@ -94,25 +94,50 @@ belongs to a store the account does not cover.
 
 ## Running with Docker
 
-`docker-compose.yml` attaches the app to an external Docker network named
-`proxy`, which Traefik's own compose setup is expected to create (see
-[Reverse proxy](#reverse-proxy)) — `docker compose up` fails with a clear
-"network proxy declared as external, but could not be found" error if that
-network does not exist yet. Create it once yourself
-(`docker network create proxy`) if Traefik isn't already providing it.
+**Production runs the image GitHub Actions already built and tested, not a
+local build.** `.github/workflows/docker-publish.yml` builds and pushes
+`ghcr.io/dani5665/apl_modules` on every push to `master` (after `go vet`,
+staticcheck, govulncheck and `go test` all pass — the image is never
+published otherwise), and `docker-compose.yml`'s `app` service runs that
+image by name. A production host only ever needs to:
 
 ```bash
 cp .env.example .env
 # Edit .env. At minimum set APP_BASE_URL, APP_ENCRYPTION_KEY, ENTRY_LINK_SECRET,
 # MSSQL_DSN, TRUSTED_PROXY_CIDRS and the two BOOTSTRAP_ADMIN_* variables.
 
-docker compose up -d --build
+docker compose pull
+docker compose up -d
 docker compose logs -f app
 ```
 
+The `ghcr.io/dani5665/apl_modules` package is private, same as the repo:
+`docker compose pull` needs `docker login ghcr.io` first with a personal
+access token that has the `read:packages` scope, and that account needs to
+actually be granted access to the package (repo collaborators usually
+inherit it; otherwise grant it directly under the package's own settings).
+
+`docker-compose.yml` also attaches the app to an external Docker network
+named `proxy`, which Traefik's own compose setup is expected to create (see
+[Reverse proxy](#reverse-proxy)) — `docker compose up` fails with a clear
+"network proxy declared as external, but could not be found" error if that
+network does not exist yet. Create it once yourself
+(`docker network create proxy`) if Traefik isn't already providing it.
+
+**For local development against this same `Dockerfile`** (no registry login
+needed), `build:` is still in `docker-compose.yml` alongside `image:`, so
+`docker compose up -d --build` builds and tags locally under that same image
+name instead of pulling it — this is how this project's own local testing
+works. Never pass `--build` on a production host; that would silently start
+running a locally-built image instead of the one CI tested.
+
 The image builds on `golang:1.27-alpine` with `CGO_ENABLED=0` and runs on
 `gcr.io/distroless/static-debian12:nonroot` as a non-root user. The binary is
-about 19 MB, so the image lands around 21 MB.
+about 19 MB, so the image lands around 21 MB. `docker-compose.yml` hardens it
+further at the container level: a read-only root filesystem (with `/tmp`
+writable, in case the Go runtime ever wants scratch space — the application
+itself writes nothing outside `/data`), every Linux capability dropped,
+`no-new-privileges`, and a 256 MB / 1 CPU resource limit.
 
 Because distroless has no shell or `curl`, the binary health-checks itself:
 
