@@ -141,13 +141,6 @@ func (h *harness) seedUser(email string, storeIDs ...int64) *store.User {
 	return h.seedUserWith(email, false, storeIDs...)
 }
 
-// seedUserMustChangePassword is seedUser but for a user whose password was
-// just reset by an admin, and so must be changed before anything else works.
-func (h *harness) seedUserMustChangePassword(email string, storeIDs ...int64) *store.User {
-	h.t.Helper()
-	return h.seedUserWith(email, true, storeIDs...)
-}
-
 func (h *harness) seedUserWith(email string, mustChangePassword bool, storeIDs ...int64) *store.User {
 	h.t.Helper()
 	hash, err := auth.HashPassword(testPassword)
