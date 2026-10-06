@@ -1,14 +1,14 @@
 {{define "content"}}
 <div class="page-head">
   <div>
-    <h1>Ново запитване за активация</h1>
-    <p class="muted">Клиент {{.Client.Name}} ({{.Client.Code}})</p>
+    <h1>{{.Client.Name}}</h1>
+    <p class="muted">Клиентски номер <span class="mono">{{.Client.Code}}</span></p>
   </div>
+  <a class="btn" href="/">← Всички клиенти</a>
 </div>
 
-{{template "request_form" .}}
 
-{{/* B. Информация за клиента */}}
+{{/* Информация за клиента */}}
 <div class="card">
   <h2 class="card-title">Информация за клиента</h2>
 
@@ -94,25 +94,7 @@
   {{end}}
 </div>
 
-{{/* C. Клиенти на моите магазини */}}
-<div class="card">
-  <h2 class="card-title">Клиенти с активни модули</h2>
-  <p class="hint">Показват се само клиенти, на които има поне един активен модул.</p>
-
-  <div class="field">
-    <label for="client-search">Търсене по клиентски номер, име, обект или потребител</label>
-    <input type="search" id="client-search" name="q" value="{{.Search}}"
-           hx-get="/clients"
-           hx-trigger="input changed delay:300ms, search"
-           hx-target="#client-list"
-           hx-select="#client-list"
-           hx-swap="outerHTML"
-           hx-indicator="#client-search-indicator">
-    <span id="client-search-indicator" class="htmx-indicator hint">Търсене…</span>
-  </div>
-
-  {{template "client_list" .}}
-</div>
+{{template "request_form" .}}
 {{end}}
 
 {{/* A. Формата. Swapped as a whole by htmx, so it carries its own state. */}}
@@ -123,7 +105,7 @@
   {{template "errors" .Errors}}
 
   <form id="request-form"
-        hx-post="/request"
+        hx-post="/clients/{{.Client.Code}}/request"
         hx-target="#request-form-wrap"
         hx-swap="outerHTML"
         hx-disabled-elt="#request-submit"
@@ -167,7 +149,7 @@
       {{if .ClientUsernames}}
       <div class="picker">
         <div class="picker-toolbar">
-          <input type="search" placeholder="Търсене на потребител"
+          <input type="search"
                  aria-label="Търсене на потребител"
                  x-model="search" @input="filterUsers">
           <button type="button" class="btn btn-small" @click="selectAllUsers">Избери всички</button>
@@ -269,7 +251,7 @@
     вземе решение.
   </div>
   <p>
-    <a class="btn" href="/">Към списъка с клиенти</a>
+    <a class="btn" href="/clients/{{.ClientCode}}">Към клиента</a> <a class="btn" href="/">Всички клиенти</a>
   </p>
 </div>
 {{end}}

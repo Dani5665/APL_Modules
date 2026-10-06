@@ -168,10 +168,12 @@ func (r Request) EndDate() string {
 // DurationLabel renders the requested duration the way the form offers it.
 func (r Request) DurationLabel() string { return DurationLabel(r.Months) }
 
-// DurationLabel renders a month count using the Bulgarian labels of the
+// DurationLabel renders a month count (0 = no end date) using the Bulgarian labels of the
 // "Активация за" dropdown.
 func DurationLabel(months int) string {
 	switch {
+	case months == 0:
+		return dates.NoEndDateLabel
 	case months == 1:
 		return "1 месец"
 	case months == 12:
@@ -187,13 +189,14 @@ type DurationOption struct {
 	Label  string
 }
 
-// DurationOptions returns the twelve selectable durations, in order.
+// DurationOptions returns the twelve selectable durations, in order, followed
+// by "no end date" (0 months).
 func DurationOptions() []DurationOption {
-	out := make([]DurationOption, 0, 12)
+	out := make([]DurationOption, 0, 13)
 	for m := 1; m <= 12; m++ {
 		out = append(out, DurationOption{Months: m, Label: DurationLabel(m)})
 	}
-	return out
+	return append(out, DurationOption{Months: 0, Label: DurationLabel(0)})
 }
 
 // Activation is one granted (username x module) row.

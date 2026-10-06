@@ -43,9 +43,20 @@ func ParseISO(s string) (time.Time, error) {
 	return t, nil
 }
 
-// FormatDisplay converts a stored ISO date to DD.MM.YYYY. Input that is not a
+// NoEndDate is the stored end date of an activation without a limit. It is a
+// real, far-future date, so every "end_date >= today" comparison keeps working.
+const NoEndDate = "9999-12-31"
+
+// NoEndDateLabel is how an activation without a limit is shown.
+const NoEndDateLabel = "Без крайна дата"
+
+// FormatDisplay converts a stored ISO date to DD.MM.YYYY, or to NoEndDateLabel
+// for NoEndDate. Input that is not a
 // valid date is returned unchanged so a template never renders an error.
 func FormatDisplay(iso string) string {
+	if iso == NoEndDate {
+		return NoEndDateLabel
+	}
 	t, err := ParseISO(iso)
 	if err != nil {
 		return iso
@@ -54,7 +65,8 @@ func FormatDisplay(iso string) string {
 }
 
 // EndDate returns the inclusive last day of an activation that starts on
-// startISO and runs for the given whole months:
+// startISO and runs for the given whole months (0 means no end date, which
+// returns NoEndDate):
 //
 //	end = start + months - 1 day
 //
@@ -66,8 +78,11 @@ func EndDate(startISO string, months int) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if months < 1 {
-		return "", fmt.Errorf("months must be at least 1, got %d", months)
+	if months == 0 {
+		return NoEndDate, nil
+	}
+	if months < 0 {
+		return "", fmt.Errorf("months must not be negative, got %d", months)
 	}
 	return AddMonths(start, months).AddDate(0, 0, -1).Format(ISO), nil
 }

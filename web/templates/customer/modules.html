@@ -1,0 +1,35 @@
+{{define "content"}}
+<div class="page-head">
+  <div>
+    <h1>Активни модули</h1>
+    <p class="muted">
+      Клиенти на {{range $i, $s := .User.Stores}}{{if $i}}, {{end}}{{$s.Name}}{{else}}— няма зададени магазини{{end}}
+    </p>
+  </div>
+</div>
+
+{{if .Unavailable}}
+<div class="alert alert-error" role="alert">
+  Списъкът не може да бъде зареден в момента. Опитайте отново по-късно.
+</div>
+{{end}}
+
+<div class="card">
+  <p class="hint">Показват се само клиенти, на които има поне един активен модул.</p>
+
+  <div class="field">
+    <label for="client-search">Търсене по клиентски номер, име, обект или потребител</label>
+    <input type="search" id="client-search" name="q" value="{{.Search}}"
+          
+           hx-get="/modules/list"
+           hx-trigger="input changed delay:300ms, search"
+           hx-target="#client-list"
+           hx-select="#client-list"
+           hx-swap="outerHTML"
+           hx-indicator="#client-search-indicator">
+    <span id="client-search-indicator" class="htmx-indicator hint">Търсене…</span>
+  </div>
+
+  {{template "client_list" .}}
+</div>
+{{end}}

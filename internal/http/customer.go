@@ -1,10 +1,13 @@
 package http
 
 import (
+	"context"
 	"errors"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
+	"time"
 
 	"haynesproform/internal/audit"
 	"haynesproform/internal/auth"
@@ -15,38 +18,6 @@ import (
 	"haynesproform/internal/store"
 )
 
-// handleEntryLink receives the link from the parent application, parks the
-// payload against a pre-session cookie and sends the salesperson to the login
-// page (or straight to the form if they are already logged in).
-//
-// TODO(PLACEHOLDER-A): the final URL format and any signature or expiry
-// verification belong in the EntryLinkParser, not here.
-func (a *App) handleEntryLink(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-
-	link, err := a.EntryLink.Parse(r)
-	if err != nil {
-		a.Log.Warn("entry link rejected", "ip", a.clientIP(r), "error", err)
-		a.Audit.Record(ctx, audit.AnonActor(""), audit.EntryDenied, "", a.clientIP(r),
-			map[string]any{"reason": "malformed entry link"})
-		a.renderError(w, r, http.StatusBadRequest, "Невалиден линк",
-			"Линкът не е валиден. Върнете се в основното приложение и опитайте отново.")
-		return
-	}
-
-	if err := a.Sessions.ParkEntryLink(ctx, w, link.ClientCode, link.SalerLogin); err != nil {
-		a.serverError(w, r, err)
-		return
-	}
-
-	// An active session goes straight on to the form.
-	if _, err := a.Sessions.Load(ctx, r, auth.UserAudience); err == nil {
-		http.Redirect(w, r, "/request", http.StatusSeeOther)
-		return
-	}
-	http.Redirect(w, r, "/login", http.StatusSeeOther)
-}
-
 type loginView struct {
 	view
 	Email string
@@ -54,9 +25,8 @@ type loginView struct {
 }
 
 func (a *App) handleUserLoginForm(w http.ResponseWriter, r *http.Request) {
-	// Already logged in: go where the entry link points, or home.
 	if _, err := a.Sessions.Load(r.Context(), r, auth.UserAudience); err == nil {
-		http.Redirect(w, r, a.postLoginTarget(r), http.StatusSeeOther)
+		http.Redirect(w, r, "/", http.StatusSeeOther)
 		return
 	}
 	a.renderUserLogin(w, r, "", "", http.StatusOK)
@@ -126,20 +96,26 @@ func (a *App) handleUserLogin(w http.ResponseWriter, r *http.Request) {
 	}
 	a.Audit.Record(ctx, audit.UserActor(user.ID, user.Email), audit.LoginSuccess, user.Email, ip, nil)
 
-	if user.MustChangePassword {
-		http.Redirect(w, r, "/password", http.StatusSeeOther)
-		return
-	}
-	http.Redirect(w, r, a.postLoginTarget(r), http.StatusSeeOther)
+	a.warmClientCache(user)
+	http.Redirect(w, r, "/", http.StatusSeeOther)
 }
 
-// postLoginTarget sends a salesperson who arrived through an entry link to
-// the request form, and everyone else to the informational home page.
-func (a *App) postLoginTarget(r *http.Request) string {
-	if _, ok := a.Sessions.PeekEntryLink(r.Context(), r); ok {
-		return "/request"
+// warmClientCache loads the clients of the user's stores from the external
+// database in the background, so the client list is already cached by the time
+// the first page after login asks for it. A failure is only logged: the page
+// that needs the list reports the error itself.
+func (a *App) warmClientCache(u *store.User) {
+	stores := u.StoreExternalValues()
+	if len(stores) == 0 {
+		return
 	}
-	return "/"
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		if _, err := a.Directory.ListClientsByStores(ctx, stores); err != nil {
+			a.Log.Warn("client list could not be preloaded", "user_id", u.ID, "error", err)
+		}
+	}()
 }
 
 func (a *App) handleUserLogout(w http.ResponseWriter, r *http.Request) {
@@ -151,99 +127,161 @@ func (a *App) handleUserLogout(w http.ResponseWriter, r *http.Request) {
 		a.serverError(w, r, err)
 		return
 	}
-	a.Sessions.ClearEntryCookie(w)
 	http.Redirect(w, r, "/login", http.StatusSeeOther)
 }
 
+// clientSearchPageSize is how many clients one page of search results holds.
+const clientSearchPageSize = 50
+
 type homeView struct {
 	view
-	Clients    []store.ClientSummary
+	Clients    []external.Client
 	ClientPage pagination
 	Search     string
-	// ClientsUnavailable is set when the client list could not be loaded, so
-	// the page still renders with an inline notice.
-	ClientsUnavailable bool
+	// LoadURL is where the page fetches its results from.
+	LoadURL     string
+	Unavailable bool
 }
 
-// handleHome shows the informational client list. Requests always start from
-// the parent application, which the page says explicitly.
+// handleHome shows the search over the clients of the user's stores. The list
+// itself is fetched by htmx right after the page loads, so the page appears
+// at once even while the external database is still answering.
 func (a *App) handleHome(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	u := userFrom(ctx)
-
-	if u.MustChangePassword {
-		http.Redirect(w, r, "/password", http.StatusSeeOther)
-		return
-	}
-	// An entry link waiting for this browser means the salesperson came here
-	// to file a request.
-	if _, ok := a.Sessions.PeekEntryLink(ctx, r); ok {
-		http.Redirect(w, r, "/request", http.StatusSeeOther)
-		return
-	}
-
 	v := homeView{view: a.newView(r, "Клиенти", "home")}
-	clients, page, search, err := a.loadClientPage(r, u)
-	if err != nil {
-		a.Log.Error("client list could not be loaded", "error", err)
-		v.ClientsUnavailable = true
+	v.Search = strings.TrimSpace(r.URL.Query().Get("q"))
+
+	// The page links of the results point back here, so the first load of the
+	// results must honour the same filter and page.
+	q := url.Values{}
+	if v.Search != "" {
+		q.Set("q", v.Search)
 	}
-	v.Clients, v.ClientPage, v.Search = clients, page, search
+	if p := pageParam(r); p > 1 {
+		q.Set("page", strconv.Itoa(p))
+	}
+	v.LoadURL = "/clients/search"
+	if len(q) > 0 {
+		v.LoadURL += "?" + q.Encode()
+	}
 
 	if err := a.render.render(w, http.StatusOK, LayoutCustomer, "customer/home", v); err != nil {
 		a.serverError(w, r, err)
 	}
 }
 
-// clientPageSize is how many clients one page of the informational list holds.
-const clientPageSize = 50
-
-// loadClientPage returns the filtered, paginated list of clients belonging to
-// the account's stores that currently have at least one active module
-// activation. This is sourced from the local database, not the external
-// directory: a client the external directory knows about but that has
-// nothing activated here does not appear.
-func (a *App) loadClientPage(r *http.Request, u *store.User) ([]store.ClientSummary, pagination, string, error) {
-	ctx := r.Context()
+// handleClientSearch serves the htmx fragment with the matching clients.
+func (a *App) handleClientSearch(w http.ResponseWriter, r *http.Request) {
+	u := userFrom(r.Context())
 	search := strings.TrimSpace(r.URL.Query().Get("q"))
 
-	p := pagination{
+	v := homeView{view: a.newView(r, "Клиенти", "home"), Search: search}
+	v.ClientPage = pagination{
 		Page:     pageParam(r),
-		PageSize: clientPageSize,
+		PageSize: clientSearchPageSize,
 		Query:    map[string]string{"q": search},
 	}
 
-	clients, total, err := a.DB.ListActiveClientsByStores(ctx, u.StoreExternalValues(), search,
+	all, err := a.Directory.ListClientsByStores(r.Context(), u.StoreExternalValues())
+	if err != nil {
+		a.Log.Error("clients could not be loaded from the external directory", "error", err)
+		v.Unavailable = true
+	} else {
+		matches := filterClients(all, search)
+		v.ClientPage.Total = len(matches)
+		from := min(v.ClientPage.Offset(), len(matches))
+		to := min(from+v.ClientPage.PageSize, len(matches))
+		v.Clients = matches[from:to]
+	}
+
+	if err := a.render.renderPartial(w, http.StatusOK, "customer/home", "client_results", v); err != nil {
+		a.serverError(w, r, err)
+	}
+}
+
+// filterClients keeps the clients whose code, name or object contains every
+// word of the search. Matching is Unicode-aware, so Cyrillic is case-folded.
+func filterClients(all []external.Client, search string) []external.Client {
+	words := strings.Fields(strings.ToLower(search))
+	if len(words) == 0 {
+		return all
+	}
+	var out []external.Client
+	for _, c := range all {
+		hay := strings.ToLower(c.Code + " " + c.Name + " " + c.Object)
+		match := true
+		for _, w := range words {
+			if !strings.Contains(hay, w) {
+				match = false
+				break
+			}
+		}
+		if match {
+			out = append(out, c)
+		}
+	}
+	return out
+}
+
+// modulesPageSize is how many clients one page of the modules list holds.
+const modulesPageSize = 50
+
+type modulesView struct {
+	view
+	Clients    []store.ClientSummary
+	ClientPage pagination
+	Search     string
+	// Unavailable is set when the list could not be loaded, so the page still
+	// renders with an inline notice.
+	Unavailable bool
+}
+
+// handleModules shows every client of the user's stores that has an active
+// module, with those modules, in a searchable table.
+func (a *App) handleModules(w http.ResponseWriter, r *http.Request) {
+	v := modulesView{view: a.newView(r, "Активни модули", "modules")}
+	v.Clients, v.ClientPage, v.Search, v.Unavailable = a.loadModulesPage(r)
+	if err := a.render.render(w, http.StatusOK, LayoutCustomer, "customer/modules", v); err != nil {
+		a.serverError(w, r, err)
+	}
+}
+
+// handleModulesList serves the htmx fragment behind the search box.
+func (a *App) handleModulesList(w http.ResponseWriter, r *http.Request) {
+	v := modulesView{view: a.newView(r, "Активни модули", "modules")}
+	v.Clients, v.ClientPage, v.Search, v.Unavailable = a.loadModulesPage(r)
+	if err := a.render.renderPartial(w, http.StatusOK, "customer/modules", "client_list", v); err != nil {
+		a.serverError(w, r, err)
+	}
+}
+
+// loadModulesPage returns the filtered, paginated list of clients belonging to
+// the account's stores that currently have at least one active module
+// activation. This is sourced from the local database: a client the external
+// directory knows about but that has nothing activated here does not appear.
+func (a *App) loadModulesPage(r *http.Request) (clients []store.ClientSummary, p pagination, search string, unavailable bool) {
+	u := userFrom(r.Context())
+	search = strings.TrimSpace(r.URL.Query().Get("q"))
+	p = pagination{
+		Page:     pageParam(r),
+		PageSize: modulesPageSize,
+		Query:    map[string]string{"q": search},
+	}
+
+	clients, total, err := a.DB.ListActiveClientsByStores(r.Context(), u.StoreExternalValues(), search,
 		p.PageSize, p.Offset())
 	if err != nil {
-		return nil, pagination{}, search, err
+		a.Log.Error("modules list could not be loaded", "error", err)
+		return nil, p, search, true
 	}
 	p.Total = total
-
-	return clients, p, search, nil
+	return clients, p, search, false
 }
 
-// handleClientList serves the htmx fragment behind the search box.
-func (a *App) handleClientList(w http.ResponseWriter, r *http.Request) {
-	u := userFrom(r.Context())
-
-	clients, page, search, err := a.loadClientPage(r, u)
-	if err != nil {
-		a.serverError(w, r, err)
-		return
-	}
-
-	data := homeView{view: a.newView(r, "Клиенти", "home"), Clients: clients, ClientPage: page, Search: search}
-	if err := a.render.renderPartial(w, http.StatusOK, "customer/home", "client_list", data); err != nil {
-		a.serverError(w, r, err)
-	}
-}
-
-// requestFormView drives the request form and everything below it.
-type requestFormView struct {
+// clientView drives the client page: the client's information and the
+// request form.
+type clientView struct {
 	view
 	Client          external.Client
-	SalerLogin      string
 	ClientUsernames []string
 	Modules         []modules.Def
 	Durations       []store.DurationOption
@@ -255,70 +293,46 @@ type requestFormView struct {
 	Errors []string
 	// Submitted carries back what the user chose, so a rejected form is not
 	// cleared.
-	Submitted  requests.Selection
-	Clients    []store.ClientSummary
-	ClientPage pagination
-	Search     string
+	Submitted requests.Selection
 }
 
-// handleRequestForm renders the request form for the parked entry link.
-func (a *App) handleRequestForm(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	u := userFrom(ctx)
+// handleClient shows one client: its users with their modules, the pending
+// requests, and the form to ask for an activation.
+func (a *App) handleClient(w http.ResponseWriter, r *http.Request) {
+	u := userFrom(r.Context())
 
-	if u.MustChangePassword {
-		http.Redirect(w, r, "/password", http.StatusSeeOther)
-		return
-	}
-
-	link, ok := a.Sessions.PeekEntryLink(ctx, r)
-	if !ok {
-		// No entry link: the informational page explains where to start.
-		http.Redirect(w, r, "/", http.StatusSeeOther)
-		return
-	}
-
-	client, err := a.authorizeEntry(w, r, u, link.ClientCode, link.SalerLogin)
+	client, err := a.authorizeClient(w, r, u, r.PathValue("code"))
 	if err != nil {
-		return // authorizeEntry has already written the response
+		return // authorizeClient has already written the response
 	}
 
-	v, err := a.buildRequestForm(r, u, link.SalerLogin, client)
+	v, err := a.buildClientView(r, client)
 	if err != nil {
 		a.externalError(w, r, err)
 		return
 	}
 	v.Submitted = requests.Selection{StartDate: dates.Today(), Months: 1}
 
-	if err := a.render.render(w, http.StatusOK, LayoutCustomer, "customer/request", v); err != nil {
+	if err := a.render.render(w, http.StatusOK, LayoutCustomer, "customer/client", v); err != nil {
 		a.serverError(w, r, err)
 	}
 }
 
-// authorizeEntry performs the section 6.2 checks and, on failure, writes the
-// error page and an audit entry. A nil error means the caller may proceed.
-func (a *App) authorizeEntry(w http.ResponseWriter, r *http.Request, u *store.User, clientCode, salerLogin string) (external.Client, error) {
+// authorizeClient checks that the client exists and belongs to one of the
+// account's stores and, on failure, writes the error page and an audit entry.
+// A nil error means the caller may proceed.
+func (a *App) authorizeClient(w http.ResponseWriter, r *http.Request, u *store.User, code string) (external.Client, error) {
 	ctx := r.Context()
-	ip := a.clientIP(r)
 
 	deny := func(reason string) (external.Client, error) {
-		a.Audit.Record(ctx, audit.UserActor(u.ID, u.Email), audit.EntryDenied, clientCode, ip,
-			map[string]any{"reason": reason, "saler_login": salerLogin})
+		a.Audit.Record(ctx, audit.UserActor(u.ID, u.Email), audit.EntryDenied, code, a.clientIP(r),
+			map[string]any{"reason": reason})
 		a.renderError(w, r, http.StatusForbidden, "Нямате достъп",
 			"Нямате достъп до този клиент.")
 		return external.Client{}, errors.New(reason)
 	}
 
-	saler, err := a.Directory.GetSaler(ctx, salerLogin)
-	switch {
-	case errors.Is(err, external.ErrNotFound):
-		return deny("salesperson not found in the external directory")
-	case err != nil:
-		a.externalError(w, r, err)
-		return external.Client{}, err
-	}
-
-	client, err := a.Directory.GetClientByCode(ctx, clientCode)
+	client, err := a.Directory.GetClientByCode(ctx, strings.TrimSpace(code))
 	switch {
 	case errors.Is(err, external.ErrNotFound):
 		return deny("client not found in the external directory")
@@ -327,23 +341,22 @@ func (a *App) authorizeEntry(w http.ResponseWriter, r *http.Request, u *store.Us
 		return external.Client{}, err
 	}
 
-	if err := requests.CheckStoreAccess(u, saler.Store, client.Store); err != nil {
+	if err := requests.CheckStoreAccess(u, client.Store); err != nil {
 		return deny(err.Error())
 	}
 	return *client, nil
 }
 
-// buildRequestForm gathers everything the form page shows.
-func (a *App) buildRequestForm(r *http.Request, u *store.User, salerLogin string, client external.Client) (requestFormView, error) {
+// buildClientView gathers everything the client page shows.
+func (a *App) buildClientView(r *http.Request, client external.Client) (clientView, error) {
 	ctx := r.Context()
 
-	v := requestFormView{
-		view:       a.newView(r, "Ново запитване", "request"),
-		Client:     client,
-		SalerLogin: salerLogin,
-		Modules:    modules.All,
-		Durations:  store.DurationOptions(),
-		Today:      dates.Today(),
+	v := clientView{
+		view:      a.newView(r, client.Name, "home"),
+		Client:    client,
+		Modules:   modules.All,
+		Durations: store.DurationOptions(),
+		Today:     dates.Today(),
 	}
 
 	usernames, err := a.Directory.ListClientLogins(ctx, client.Code)
@@ -361,14 +374,6 @@ func (a *App) buildRequestForm(r *http.Request, u *store.User, salerLogin string
 	if v.PendingRequests, err = a.DB.ListRequestsForClient(ctx, client.Code, store.StatusPending); err != nil {
 		return v, err
 	}
-
-	clients, page, search, err := a.loadClientPage(r, u)
-	if err != nil {
-		// The client list is informational; its absence must not block the
-		// form itself.
-		a.Log.Warn("client list could not be loaded for the request form", "error", err)
-	}
-	v.Clients, v.ClientPage, v.Search = clients, page, search
 	return v, nil
 }
 
@@ -378,15 +383,8 @@ func (a *App) handleRequestSubmit(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	u := userFrom(ctx)
 
-	link, ok := a.Sessions.PeekEntryLink(ctx, r)
-	if !ok {
-		a.renderError(w, r, http.StatusBadRequest, "Липсва клиент",
-			"Запитванията се започват от основното приложение.")
-		return
-	}
-
-	// Authorization is re-checked on submit, not only when the form was shown.
-	client, err := a.authorizeEntry(w, r, u, link.ClientCode, link.SalerLogin)
+	// Authorization is re-checked on submit, not only when the page was shown.
+	client, err := a.authorizeClient(w, r, u, r.PathValue("code"))
 	if err != nil {
 		return
 	}
@@ -407,7 +405,7 @@ func (a *App) handleRequestSubmit(w http.ResponseWriter, r *http.Request) {
 
 	selected, verr := requests.ValidateInput(sel, usernames, testUsed, dates.Today())
 	if verr != nil {
-		a.renderFormErrors(w, r, u, link.SalerLogin, client, sel, verr)
+		a.renderFormErrors(w, r, client, sel, verr)
 		return
 	}
 
@@ -418,7 +416,6 @@ func (a *App) handleRequestSubmit(w http.ResponseWriter, r *http.Request) {
 		ClientStore:     client.Store,
 		SubmitterUserID: u.ID,
 		SubmitterEmail:  u.Email,
-		SalerLogin:      link.SalerLogin,
 		TestPeriod:      sel.TestPeriod,
 		StartDate:       sel.StartDate,
 		Months:          sel.Months,
@@ -429,11 +426,6 @@ func (a *App) handleRequestSubmit(w http.ResponseWriter, r *http.Request) {
 		a.serverError(w, r, err)
 		return
 	}
-
-	// The entry link is consumed once the request is filed, so a refresh
-	// cannot silently submit it again.
-	a.Sessions.ClearEntryCookie(w)
-	_, _ = a.Sessions.TakeEntryLink(ctx, w, r)
 
 	a.Audit.Record(ctx, audit.UserActor(u.ID, u.Email), audit.RequestSubmitted,
 		strconv.FormatInt(id, 10), a.clientIP(r), map[string]any{
@@ -446,16 +438,16 @@ func (a *App) handleRequestSubmit(w http.ResponseWriter, r *http.Request) {
 
 	a.queueRequestCreated(ctx, id)
 
-	data := map[string]any{"RequestID": id, "ClientName": client.Name}
-	if err := a.render.renderPartial(w, http.StatusOK, "customer/request", "submit_success", data); err != nil {
+	data := map[string]any{"RequestID": id, "ClientName": client.Name, "ClientCode": client.Code}
+	if err := a.render.renderPartial(w, http.StatusOK, "customer/client", "submit_success", data); err != nil {
 		a.serverError(w, r, err)
 	}
 }
 
 // renderFormErrors re-renders the form with the validation messages, as an
 // htmx fragment replacing the form.
-func (a *App) renderFormErrors(w http.ResponseWriter, r *http.Request, u *store.User, salerLogin string, client external.Client, sel requests.Selection, verr error) {
-	v, err := a.buildRequestForm(r, u, salerLogin, client)
+func (a *App) renderFormErrors(w http.ResponseWriter, r *http.Request, client external.Client, sel requests.Selection, verr error) {
+	v, err := a.buildClientView(r, client)
 	if err != nil {
 		a.externalError(w, r, err)
 		return
@@ -469,7 +461,7 @@ func (a *App) renderFormErrors(w http.ResponseWriter, r *http.Request, u *store.
 		v.Errors = []string{verr.Error()}
 	}
 
-	if err := a.render.renderPartial(w, http.StatusUnprocessableEntity, "customer/request", "request_form", v); err != nil {
+	if err := a.render.renderPartial(w, http.StatusUnprocessableEntity, "customer/client", "request_form", v); err != nil {
 		a.serverError(w, r, err)
 	}
 }
@@ -501,59 +493,4 @@ func checkboxValue(r *http.Request, name string) bool {
 		}
 	}
 	return false
-}
-
-type passwordView struct {
-	view
-	Error  string
-	Forced bool
-}
-
-func (a *App) handleUserPasswordForm(w http.ResponseWriter, r *http.Request) {
-	u := userFrom(r.Context())
-	v := passwordView{view: a.newView(r, "Смяна на парола", "password"), Forced: u.MustChangePassword}
-	if err := a.render.render(w, http.StatusOK, LayoutCustomer, "customer/password", v); err != nil {
-		a.serverError(w, r, err)
-	}
-}
-
-func (a *App) handleUserPasswordChange(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	u := userFrom(ctx)
-
-	current := r.PostFormValue("current_password")
-	next := r.PostFormValue("new_password")
-	confirm := r.PostFormValue("confirm_password")
-
-	renderErr := func(msg string) {
-		v := passwordView{
-			view:   a.newView(r, "Смяна на парола", "password"),
-			Error:  msg,
-			Forced: u.MustChangePassword,
-		}
-		if err := a.render.render(w, http.StatusUnprocessableEntity, LayoutCustomer, "customer/password", v); err != nil {
-			a.serverError(w, r, err)
-		}
-	}
-
-	if !auth.CheckPassword(u.PasswordHash, current) {
-		renderErr("Текущата парола е грешна.")
-		return
-	}
-	if next != confirm {
-		renderErr("Двете нови пароли не съвпадат.")
-		return
-	}
-	hash, err := auth.HashPassword(next)
-	if err != nil {
-		renderErr(err.Error())
-		return
-	}
-	if err := a.DB.SetUserPassword(ctx, u.ID, hash, false); err != nil {
-		a.serverError(w, r, err)
-		return
-	}
-
-	a.Audit.Record(ctx, audit.UserActor(u.ID, u.Email), audit.PasswordChanged, u.Email, a.clientIP(r), nil)
-	redirectWithFlash(w, r, "/", "password_changed")
 }

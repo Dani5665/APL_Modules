@@ -23,10 +23,9 @@ func adminSetup(t *testing.T, h *harness) (*session, int64) {
 
 	email, code := sofiaSetup(t, h)
 	user := h.loginUser(email)
-	user.followEntryLink(code, "ivan.petrov")
 
 	client := h.firstMockClient(mock.StoreSofia)
-	assertStatus(t, user.post("/request", submitForm(h, client.Code)), http.StatusOK)
+	assertStatus(t, user.post("/clients/"+code+"/request", submitForm(h, client.Code)), http.StatusOK)
 
 	reqs, _, err := h.db.ListRequests(context.Background(), store.RequestFilter{Limit: 1})
 	if err != nil || len(reqs) == 0 {
@@ -323,8 +322,7 @@ func TestApproveCreatesOneActivationPerUsernameAndModule(t *testing.T) {
 	}
 
 	user := h.loginUser(email)
-	user.followEntryLink(code, "ivan.petrov")
-	assertStatus(t, user.post("/request", url.Values{
+	assertStatus(t, user.post("/clients/"+code+"/request", url.Values{
 		"usernames":              {logins[0], logins[1]},
 		"module_fast_calculator": {"1"},
 		"module_haynespro":       {"1"},
@@ -459,8 +457,7 @@ func TestDeniedTestPeriodIsNotConsumed(t *testing.T) {
 	logins := h.clientLogins(client.Code)
 
 	user := h.loginUser(email)
-	user.followEntryLink(code, "ivan.petrov")
-	assertStatus(t, user.post("/request", url.Values{
+	assertStatus(t, user.post("/clients/"+code+"/request", url.Values{
 		"usernames":   {logins[0]},
 		"test_period": {"1"},
 		"start_date":  {dates.Today()},
@@ -484,8 +481,7 @@ func TestDeniedTestPeriodIsNotConsumed(t *testing.T) {
 
 	// And a fresh test-period request is accepted again.
 	user2 := h.loginUser(email)
-	user2.followEntryLink(code, "ivan.petrov")
-	rec := user2.post("/request", url.Values{
+	rec := user2.post("/clients/"+code+"/request", url.Values{
 		"usernames":   {logins[0]},
 		"test_period": {"1"},
 		"start_date":  {dates.Today()},

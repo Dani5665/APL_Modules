@@ -128,8 +128,8 @@ func TestValidateInputRejections(t *testing.T) {
 			wantMessage: "период на активация",
 		},
 		{
-			name:        "zero months",
-			mutate:      func(s *Selection) { s.Months = 0 },
+			name:        "negative months",
+			mutate:      func(s *Selection) { s.Months = -1 },
 			wantMessage: "период на активация",
 		},
 		{
@@ -206,36 +206,39 @@ func TestCheckStoreAccess(t *testing.T) {
 		},
 	}
 
-	if err := CheckStoreAccess(user, "SOFIA", "SOFIA"); err != nil {
+	if err := CheckStoreAccess(user, "SOFIA"); err != nil {
 		t.Errorf("access to an own store was refused: %v", err)
 	}
 	// Comparison ignores case and surrounding space, because external values
 	// are maintained by hand.
-	if err := CheckStoreAccess(user, " sofia ", "Varna"); err != nil {
+	if err := CheckStoreAccess(user, " varna "); err != nil {
 		t.Errorf("case-insensitive store match was refused: %v", err)
 	}
 
 	tests := []struct {
 		name        string
 		user        *store.User
-		salerStore  string
 		clientStore string
 	}{
-		{"salesperson from another store", user, "PLOVDIV", "SOFIA"},
-		{"client of another store", user, "SOFIA", "PLOVDIV"},
-		{"both from another store", user, "PLOVDIV", "PLOVDIV"},
-		{"empty salesperson store", user, "", "SOFIA"},
-		{"empty client store", user, "SOFIA", ""},
-		{"inactive account", &store.User{Active: false, Stores: user.Stores}, "SOFIA", "SOFIA"},
-		{"account with no stores", &store.User{Active: true}, "SOFIA", "SOFIA"},
-		{"no account", nil, "SOFIA", "SOFIA"},
+		{"client of another store", user, "PLOVDIV"},
+		{"empty client store", user, ""},
+		{"inactive account", &store.User{Active: false, Stores: user.Stores}, "SOFIA"},
+		{"account with no stores", &store.User{Active: true}, "SOFIA"},
+		{"no account", nil, "SOFIA"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := CheckStoreAccess(tt.user, tt.salerStore, tt.clientStore)
+			err := CheckStoreAccess(tt.user, tt.clientStore)
 			if !errors.Is(err, ErrNoAccess) {
 				t.Errorf("CheckStoreAccess = %v, want ErrNoAccess", err)
 			}
 		})
+	}
+}
+
+func TestValidateInputAcceptsNoEndDate(t *testing.T) {
+	s := Selection{FastCalculator: true, StartDate: "2026-10-10", Months: 0, Usernames: []string{"a"}}
+	if _, err := ValidateInput(s, []string{"a"}, false, "2026-10-06"); err != nil {
+		t.Errorf("months 0 (no end date) was rejected: %v", err)
 	}
 }

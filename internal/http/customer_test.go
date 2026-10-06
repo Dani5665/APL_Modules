@@ -40,7 +40,7 @@ func TestLoginRequiredForCustomerPages(t *testing.T) {
 	h := newHarness(t)
 	s := h.newSession()
 
-	for _, path := range []string{"/", "/request", "/clients", "/password"} {
+	for _, path := range []string{"/", "/clients/search", "/clients/100000001", "/modules", "/modules/list"} {
 		rec := s.get(path)
 		if rec.Code != http.StatusSeeOther {
 			t.Errorf("GET %s without a session: status %d, want 303", path, rec.Code)
@@ -98,199 +98,6 @@ func TestDeactivatedUserCannotLogIn(t *testing.T) {
 	assertStatus(t, rec, http.StatusUnauthorized)
 }
 
-// TestUserMustChangePasswordBlocksEveryPageUntilChanged is the gate in
-// requireUser: a forced password change (set on this account by an admin)
-// must hold on every page, not only the ones that happen to check it right
-// after login - a bookmark to the home page must not skip it.
-func TestUserMustChangePasswordBlocksEveryPageUntilChanged(t *testing.T) {
-	h := newHarness(t)
-	sofia := h.seedStore("Магазин София", mock.StoreSofia)
-	const email = "prodavach@example.com"
-	h.seedUserMustChangePassword(email, sofia)
-	s := h.loginUser(email)
-
-	rec := s.get("/")
-	assertStatus(t, rec, http.StatusSeeOther)
-	if loc := rec.Header().Get("Location"); loc != "/password" {
-		t.Fatalf("a session owing a password change reached %q, want /password", loc)
-	}
-
-	assertStatus(t, s.get("/password"), http.StatusOK)
-
-	const newPassword = "brand-new-password-123"
-	rec = s.post("/password", url.Values{
-		"current_password": {testPassword},
-		"new_password":     {newPassword},
-		"confirm_password": {newPassword},
-	})
-	assertStatus(t, rec, http.StatusSeeOther)
-
-	assertStatus(t, s.get("/"), http.StatusOK)
-}
-
-// TestHomeShowsNoClientsWithoutActivations is the behaviour this list exists
-// for: the informational list is sourced from local activations, not from
-// every client the external directory knows about, so a store with accounts
-// and clients configured but nothing activated yet shows no clients at all.
-func TestHomeShowsNoClientsWithoutActivations(t *testing.T) {
-	h := newHarness(t)
-	email, _ := sofiaSetup(t, h)
-	s := h.loginUser(email)
-
-	rec := s.get("/")
-	assertStatus(t, rec, http.StatusOK)
-	assertContains(t, rec,
-		"Клиенти с активни модули",
-		"Запитванията за активация се започват от основното приложение",
-		"Няма клиенти с активни модули за вашите магазини.",
-	)
-	// The external directory's clients must not leak into the list just
-	// because they exist there.
-	assertNotContains(t, rec, h.firstMockClient(mock.StoreSofia).Name)
-}
-
-func TestHomeListsClientsWithAnActiveActivation(t *testing.T) {
-	h := newHarness(t)
-	email, _ := sofiaSetup(t, h)
-	s := h.loginUser(email)
-
-	sofiaClient := h.firstMockClient(mock.StoreSofia)
-	varnaClient := h.firstMockClient(mock.StoreVarna)
-	h.seedActivation(sofiaClient, h.clientLogins(sofiaClient.Code)[0])
-	// Activated, but at a store this account does not cover.
-	h.seedActivation(varnaClient, h.clientLogins(varnaClient.Code)[0])
-
-	rec := s.get("/")
-	assertStatus(t, rec, http.StatusOK)
-	assertContains(t, rec, sofiaClient.Name)
-	assertNotContains(t, rec, varnaClient.Name)
-}
-
-func TestClientSearchFiltersTheList(t *testing.T) {
-	h := newHarness(t)
-	email, _ := sofiaSetup(t, h)
-	s := h.loginUser(email)
-
-	client := h.firstMockClient(mock.StoreSofia)
-	login := h.clientLogins(client.Code)[0]
-	h.seedActivation(client, login)
-
-	rec := s.get("/clients?q=" + url.QueryEscape(client.Code))
-	assertStatus(t, rec, http.StatusOK)
-	// The client's heading row, then its activation row with the username.
-	assertContains(t, rec, `class="group-head"`, client.Code, client.Name, login)
-
-	// A username also finds its client.
-	rec = s.get("/clients?q=" + url.QueryEscape(login))
-	assertStatus(t, rec, http.StatusOK)
-	assertContains(t, rec, client.Name)
-
-	rec = s.get("/clients?q=" + url.QueryEscape("няма-такъв-клиент"))
-	assertStatus(t, rec, http.StatusOK)
-	assertContains(t, rec, "Няма намерени клиенти с активни модули по това търсене.")
-}
-
-func TestEntryLinkValidation(t *testing.T) {
-	h := newHarness(t)
-	email, _ := sofiaSetup(t, h)
-	s := h.loginUser(email)
-
-	// Not nine digits.
-	rec := s.followEntryLink("12345", "ivan.petrov")
-	assertStatus(t, rec, http.StatusBadRequest)
-	assertContains(t, rec, "Невалиден линк")
-
-	// Nine characters, but not all digits.
-	rec = s.followEntryLink("12345678a", "ivan.petrov")
-	assertStatus(t, rec, http.StatusBadRequest)
-}
-
-func TestEntryLinkLeadsToTheRequestForm(t *testing.T) {
-	h := newHarness(t)
-	email, code := sofiaSetup(t, h)
-	s := h.loginUser(email)
-
-	rec := s.followEntryLink(code, "ivan.petrov")
-	assertStatus(t, rec, http.StatusSeeOther)
-	if loc := rec.Header().Get("Location"); loc != "/request" {
-		t.Fatalf("entry link redirected to %q, want /request", loc)
-	}
-
-	rec = s.get("/request")
-	assertStatus(t, rec, http.StatusOK)
-
-	client := h.firstMockClient(mock.StoreSofia)
-	assertContains(t, rec,
-		"Ново запитване за активация",
-		client.Code,
-		client.Name,
-		client.Object,
-		"Тест период",
-		"Fast Calculator",
-		"HaynesPro",
-		"Изпрати запитване",
-	)
-	// The client's own usernames are offered.
-	for _, u := range h.clientLogins(client.Code) {
-		assertContains(t, rec, u)
-	}
-}
-
-func TestEntryLinkDeniesAClientOfAnotherStore(t *testing.T) {
-	h := newHarness(t)
-	email, _ := sofiaSetup(t, h)
-	s := h.loginUser(email)
-
-	// A Varna client, reached by a Varna salesperson: the account covers
-	// neither store.
-	varna := h.firstMockClient(mock.StoreVarna)
-	s.followEntryLink(varna.Code, "maria.dimitrova")
-
-	rec := s.get("/request")
-	assertStatus(t, rec, http.StatusForbidden)
-	assertContains(t, rec, "Нямате достъп до този клиент.")
-	// No client data may leak on refusal.
-	assertNotContains(t, rec, varna.Name, varna.Object)
-}
-
-func TestEntryLinkDeniesAMismatchedSalesperson(t *testing.T) {
-	h := newHarness(t)
-	email, code := sofiaSetup(t, h)
-	s := h.loginUser(email)
-
-	// The client is in Sofia, but this salesperson belongs to Varna, so the
-	// salesperson's store does not match the account's.
-	s.followEntryLink(code, "maria.dimitrova")
-
-	rec := s.get("/request")
-	assertStatus(t, rec, http.StatusForbidden)
-	assertContains(t, rec, "Нямате достъп до този клиент.")
-}
-
-func TestEntryLinkDeniesAnUnknownSalesperson(t *testing.T) {
-	h := newHarness(t)
-	email, code := sofiaSetup(t, h)
-	s := h.loginUser(email)
-
-	s.followEntryLink(code, "nobody.at.all")
-
-	rec := s.get("/request")
-	assertStatus(t, rec, http.StatusForbidden)
-	assertContains(t, rec, "Нямате достъп до този клиент.")
-}
-
-func TestRequestWithoutAnEntryLinkRedirectsHome(t *testing.T) {
-	h := newHarness(t)
-	email, _ := sofiaSetup(t, h)
-	s := h.loginUser(email)
-
-	rec := s.get("/request")
-	assertStatus(t, rec, http.StatusSeeOther)
-	if loc := rec.Header().Get("Location"); loc != "/" {
-		t.Errorf("redirected to %q, want /", loc)
-	}
-}
-
 // submitForm builds a valid submission for the given client.
 func submitForm(h *harness, clientCode string) url.Values {
 	logins := h.clientLogins(clientCode)
@@ -306,10 +113,9 @@ func TestSubmitStoresAPendingRequest(t *testing.T) {
 	h := newHarness(t)
 	email, code := sofiaSetup(t, h)
 	s := h.loginUser(email)
-	s.followEntryLink(code, "ivan.petrov")
 
 	client := h.firstMockClient(mock.StoreSofia)
-	rec := s.post("/request", submitForm(h, client.Code))
+	rec := s.post("/clients/"+code+"/request", submitForm(h, client.Code))
 	assertStatus(t, rec, http.StatusOK)
 	assertContains(t, rec, "Запитването е изпратено.")
 
@@ -332,9 +138,6 @@ func TestSubmitStoresAPendingRequest(t *testing.T) {
 	if r.SubmitterEmail != email {
 		t.Errorf("submitter = %q, want %q", r.SubmitterEmail, email)
 	}
-	if r.SalerLogin != "ivan.petrov" {
-		t.Errorf("saler login = %q, want ivan.petrov", r.SalerLogin)
-	}
 	if len(r.Modules) != 1 || r.Modules[0].Module != modules.FastCalculator {
 		t.Errorf("modules = %+v, want only Fast Calculator", r.Modules)
 	}
@@ -347,7 +150,6 @@ func TestSubmitForcesTestPeriodRulesServerSide(t *testing.T) {
 	h := newHarness(t)
 	email, code := sofiaSetup(t, h)
 	s := h.loginUser(email)
-	s.followEntryLink(code, "ivan.petrov")
 
 	client := h.firstMockClient(mock.StoreSofia)
 	logins := h.clientLogins(client.Code)
@@ -355,7 +157,7 @@ func TestSubmitForcesTestPeriodRulesServerSide(t *testing.T) {
 	// A tampered post: test period on, no modules, twelve months, Ultra tier.
 	// The browser would not send the disabled fields at all, and the server
 	// must impose the rule whatever arrives.
-	rec := s.post("/request", url.Values{
+	rec := s.post("/clients/"+code+"/request", url.Values{
 		"usernames":      {logins[0]},
 		"test_period":    {"1"},
 		"haynespro_tier": {"ULTRA"},
@@ -402,8 +204,7 @@ func TestSubmitRejectsATestPeriodAlreadyUsed(t *testing.T) {
 	logins := h.clientLogins(client.Code)
 
 	s := h.loginUser(email)
-	s.followEntryLink(code, "ivan.petrov")
-	first := s.post("/request", url.Values{
+	first := s.post("/clients/"+code+"/request", url.Values{
 		"usernames":   {logins[0]},
 		"test_period": {"1"},
 		"start_date":  {dates.Today()},
@@ -411,8 +212,7 @@ func TestSubmitRejectsATestPeriodAlreadyUsed(t *testing.T) {
 	assertStatus(t, first, http.StatusOK)
 
 	// A second test period for the same client is refused.
-	s.followEntryLink(code, "ivan.petrov")
-	second := s.post("/request", url.Values{
+	second := s.post("/clients/"+code+"/request", url.Values{
 		"usernames":   {logins[0]},
 		"test_period": {"1"},
 		"start_date":  {dates.Today()},
@@ -471,9 +271,8 @@ func TestSubmitValidationErrors(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			s := h.loginUser(email)
-			s.followEntryLink(code, "ivan.petrov")
 
-			rec := s.post("/request", tt.form)
+			rec := s.post("/clients/"+code+"/request", tt.form)
 			assertStatus(t, rec, http.StatusUnprocessableEntity)
 			assertContains(t, rec, tt.want)
 
@@ -492,13 +291,12 @@ func TestSubmitRequiresTheCSRFToken(t *testing.T) {
 	h := newHarness(t)
 	email, code := sofiaSetup(t, h)
 	s := h.loginUser(email)
-	s.followEntryLink(code, "ivan.petrov")
 
 	client := h.firstMockClient(mock.StoreSofia)
 	form := submitForm(h, client.Code)
 	form.Set("csrf_token", "not-the-right-token")
 
-	rec := s.post("/request", form)
+	rec := s.post("/clients/"+code+"/request", form)
 	assertStatus(t, rec, http.StatusForbidden)
 
 	_, total, err := h.db.ListRequests(context.Background(), store.RequestFilter{Limit: 10})
@@ -507,24 +305,6 @@ func TestSubmitRequiresTheCSRFToken(t *testing.T) {
 	}
 	if total != 0 {
 		t.Errorf("a request without a valid CSRF token was stored")
-	}
-}
-
-func TestSubmitConsumesTheEntryLink(t *testing.T) {
-	h := newHarness(t)
-	email, code := sofiaSetup(t, h)
-	s := h.loginUser(email)
-	s.followEntryLink(code, "ivan.petrov")
-
-	client := h.firstMockClient(mock.StoreSofia)
-	assertStatus(t, s.post("/request", submitForm(h, client.Code)), http.StatusOK)
-
-	// Re-opening the form without a fresh entry link goes home instead of
-	// offering a second submission.
-	rec := s.get("/request")
-	assertStatus(t, rec, http.StatusSeeOther)
-	if loc := rec.Header().Get("Location"); loc != "/" {
-		t.Errorf("redirected to %q, want /", loc)
 	}
 }
 
@@ -538,9 +318,8 @@ func TestSubmitQueuesTheNotificationEmail(t *testing.T) {
 	}
 
 	s := h.loginUser(email)
-	s.followEntryLink(code, "ivan.petrov")
 	client := h.firstMockClient(mock.StoreSofia)
-	assertStatus(t, s.post("/request", submitForm(h, client.Code)), http.StatusOK)
+	assertStatus(t, s.post("/clients/"+code+"/request", submitForm(h, client.Code)), http.StatusOK)
 
 	msgs, total, err := h.db.ListOutbox(context.Background(), "", 10, 0)
 	if err != nil {
@@ -567,10 +346,9 @@ func TestSubmitSucceedsWithoutSMTP(t *testing.T) {
 	email, code := sofiaSetup(t, h)
 
 	s := h.loginUser(email)
-	s.followEntryLink(code, "ivan.petrov")
 	client := h.firstMockClient(mock.StoreSofia)
 
-	rec := s.post("/request", submitForm(h, client.Code))
+	rec := s.post("/clients/"+code+"/request", submitForm(h, client.Code))
 	assertStatus(t, rec, http.StatusOK)
 	assertContains(t, rec, "Запитването е изпратено.")
 
@@ -581,44 +359,6 @@ func TestSubmitSucceedsWithoutSMTP(t *testing.T) {
 	if total != 1 {
 		t.Errorf("stored %d requests, want 1", total)
 	}
-}
-
-func TestUserPasswordChange(t *testing.T) {
-	h := newHarness(t)
-	email, _ := sofiaSetup(t, h)
-	s := h.loginUser(email)
-
-	rec := s.post("/password", url.Values{
-		"current_password": {"wrong"},
-		"new_password":     {"nova-parola-1234"},
-		"confirm_password": {"nova-parola-1234"},
-	})
-	assertStatus(t, rec, http.StatusUnprocessableEntity)
-	assertContains(t, rec, "Текущата парола е грешна.")
-
-	rec = s.post("/password", url.Values{
-		"current_password": {testPassword},
-		"new_password":     {"nova-parola-1234"},
-		"confirm_password": {"druga-parola-1234"},
-	})
-	assertStatus(t, rec, http.StatusUnprocessableEntity)
-	assertContains(t, rec, "Двете нови пароли не съвпадат.")
-
-	rec = s.post("/password", url.Values{
-		"current_password": {testPassword},
-		"new_password":     {"nova-parola-1234"},
-		"confirm_password": {"nova-parola-1234"},
-	})
-	assertStatus(t, rec, http.StatusSeeOther)
-
-	// The new password works and the old one does not.
-	fresh := h.newSession()
-	assertStatus(t, fresh.post("/login",
-		url.Values{"email": {email}, "password": {"nova-parola-1234"}}), http.StatusSeeOther)
-
-	fresh2 := h.newSession()
-	assertStatus(t, fresh2.post("/login",
-		url.Values{"email": {email}, "password": {testPassword}}), http.StatusUnauthorized)
 }
 
 func TestLogoutEndsTheSession(t *testing.T) {

@@ -22,7 +22,6 @@
   <dl class="details">
     <dt>Подадено на</dt><dd>{{datetime $r.CreatedAt}}</dd>
     <dt>Подател</dt><dd>{{$r.SubmitterEmail}}</dd>
-    <dt>Търговец (LOGIN)</dt><dd class="mono">{{$r.SalerLogin}}</dd>
     <dt>Клиентски номер</dt><dd class="mono">{{$r.ClientCode}}</dd>
     <dt>Име на клиент</dt><dd>{{$r.ClientName}}</dd>
     <dt>Обект на клиента</dt><dd>{{$r.ClientObject}}</dd>
@@ -79,7 +78,7 @@
       <legend>Потребители</legend>
       <div class="picker">
         <div class="picker-toolbar">
-          <input type="search" placeholder="Търсене на потребител"
+          <input type="search"
                  aria-label="Търсене на потребител"
                  x-model="search" @input="filterUsers">
           <button type="button" class="btn btn-small" @click="selectAllUsers">Избери всички</button>

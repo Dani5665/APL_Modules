@@ -16,6 +16,7 @@ import (
 type adminActivationsView struct {
 	view
 	Activations   []store.Activation
+	Groups        []activationGroup
 	Page          pagination
 	Filter        store.ActivationFilter
 	Stores        []string
@@ -73,6 +74,7 @@ func (a *App) handleAdminActivations(w http.ResponseWriter, r *http.Request) {
 	v := adminActivationsView{
 		view:          a.newView(r, "Клиенти и активации", "activations"),
 		Activations:   rows,
+		Groups:        groupActivations(rows),
 		Page:          page,
 		Filter:        f,
 		Stores:        storeValues,
@@ -168,7 +170,7 @@ func parseActivationForm(r *http.Request) (store.Activation, []string) {
 	}
 
 	// The end date can be given directly, or derived from a month count.
-	if months, err := strconv.Atoi(strings.TrimSpace(r.PostFormValue("months"))); err == nil && months >= 1 && months <= 12 {
+	if months, err := strconv.Atoi(strings.TrimSpace(r.PostFormValue("months"))); err == nil && months >= 0 && months <= 12 {
 		if end, err := dates.EndDate(a.StartDate, months); err == nil {
 			a.EndDate = end
 		}
@@ -388,4 +390,28 @@ func (a *App) handleAdminExport(w http.ResponseWriter, r *http.Request) {
 	if _, err := w.Write(res.Content); err != nil {
 		a.Log.Error("export could not be written to the response", "error", err)
 	}
+}
+
+// activationGroup is one client with its activations, as shown in the grouped
+// activations table.
+type activationGroup struct {
+	Code, Name, Object, Store string
+	Activations               []store.Activation
+}
+
+// groupActivations groups rows by client. The rows arrive ordered by client,
+// so a client's rows are adjacent; a client split across two pages simply
+// appears on both.
+func groupActivations(rows []store.Activation) []activationGroup {
+	var out []activationGroup
+	for _, a := range rows {
+		if n := len(out); n == 0 || out[n-1].Code != a.ClientCode {
+			out = append(out, activationGroup{
+				Code: a.ClientCode, Name: a.ClientName, Object: a.ClientObject, Store: a.ClientStore,
+			})
+		}
+		g := &out[len(out)-1]
+		g.Activations = append(g.Activations, a)
+	}
+	return out
 }

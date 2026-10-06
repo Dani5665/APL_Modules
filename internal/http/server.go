@@ -12,7 +12,6 @@ import (
 	"haynesproform/internal/auth"
 	"haynesproform/internal/config"
 	"haynesproform/internal/email"
-	"haynesproform/internal/entrylink"
 	"haynesproform/internal/export"
 	"haynesproform/internal/external"
 	"haynesproform/internal/requests"
@@ -34,7 +33,6 @@ type App struct {
 	Outbox    *email.Worker
 	Export    *export.Generator
 	Scheduler *scheduler.Runner
-	EntryLink entrylink.EntryLinkParser
 	Log       *slog.Logger
 
 	render *renderer

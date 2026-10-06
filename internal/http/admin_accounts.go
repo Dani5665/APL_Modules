@@ -90,7 +90,6 @@ func (a *App) handleAdminUserCreate(w http.ResponseWriter, r *http.Request) {
 	rawEmail := strings.TrimSpace(r.PostFormValue("email"))
 	password := r.PostFormValue("password")
 	storeIDs := parseIDs(r.PostForm["stores"])
-	mustChange := checkboxValue(r, "must_change_password")
 
 	var errs []string
 	email, err := auth.NormalizeEmail(rawEmail)
@@ -106,7 +105,7 @@ func (a *App) handleAdminUserCreate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if len(errs) == 0 {
-		_, err = a.DB.CreateUser(c, email, hash, storeIDs, mustChange)
+		_, err = a.DB.CreateUser(c, email, hash, storeIDs, false)
 		if errors.Is(err, store.ErrConflict) {
 			errs = append(errs, "Вече съществува потребител с този имейл.")
 		} else if err != nil {
@@ -218,8 +217,7 @@ func (a *App) handleAdminUserPassword(w http.ResponseWriter, r *http.Request) {
 		a.renderError(w, r, http.StatusUnprocessableEntity, "Невалидна парола", err.Error())
 		return
 	}
-	// A password an admin set is treated as temporary.
-	if err := a.DB.SetUserPassword(c, id, hash, checkboxValue(r, "must_change_password")); err != nil {
+	if err := a.DB.SetUserPassword(c, id, hash, false); err != nil {
 		a.serverError(w, r, err)
 		return
 	}

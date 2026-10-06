@@ -26,7 +26,6 @@ front end and nothing is fetched from a CDN at runtime.
 - [How a request flows through the system](#how-a-request-flows-through-the-system)
 - [The external database](#the-external-database)
 - [Placeholders — all resolved](#placeholders--all-resolved)
-- [Entry link format](#entry-link-format)
 - [Reverse proxy](#reverse-proxy)
 - [Backups](#backups)
 - [Email](#email)
@@ -80,15 +79,15 @@ Then:
 |---|---|
 | Salesperson login | <http://localhost:8080/login> — `ivan.petrov@example.com` / `demo-parola-2026` |
 | | or `maria.dimitrova@example.com` / `demo-parola-2026` |
-| A request form | <http://localhost:8080/r/100000001/ivan.petrov> |
+| Client page | <http://localhost:8080/clients/100000001> (after signing in as `ivan.petrov`) |
 | Admin login | <http://localhost:8080/admin/login> — the bootstrap admin above |
 | Health | <http://localhost:8080/healthz> |
 
 `ivan.petrov` covers Sofia (client codes `100000001`–`100000007`);
 `maria.dimitrova` covers Varna and Plovdiv (`100000008`–`100000020`).
 
-Try `/r/100000008/ivan.petrov` to see the authorization refusal: the client
-belongs to a store the account does not cover.
+Try `/clients/100000008` as `ivan.petrov` to see the authorization refusal: the
+client belongs to a store the account does not cover.
 
 ---
 
@@ -120,7 +119,7 @@ Either way, a production host only ever needs:
 
 ```bash
 cp .env.example .env
-# Edit .env. At minimum set APP_BASE_URL, APP_ENCRYPTION_KEY, ENTRY_LINK_SECRET,
+# Edit .env. At minimum set APP_BASE_URL, APP_ENCRYPTION_KEY,
 # MSSQL_DSN, TRUSTED_PROXY_CIDRS and the two BOOTSTRAP_ADMIN_* variables.
 
 docker compose -f docker-compose-deploy.yml pull
@@ -188,8 +187,6 @@ message listing every problem at once.
 | `EXTERNAL_DB_MODE` | `mock` | `mssql` or `mock`. |
 | `MSSQL_DSN` | — | Required when `EXTERNAL_DB_MODE=mssql`. |
 | `APP_ENCRYPTION_KEY` | — | **Required.** 32 random bytes, base64. |
-| `ENTRY_LINK_SECRET` | — | **Required** unless `ENTRY_LINK_SIGNING_ENABLED=false`. At least 16 random bytes, base64. See [Entry link format](#entry-link-format). |
-| `ENTRY_LINK_SIGNING_ENABLED` | `true` | Set `false` if the parent application doesn't sign its links — allowed with any `EXTERNAL_DB_MODE`, unlike `ADMIN_2FA_ENABLED`. |
 | `SESSION_IDLE_TIMEOUT` | `2h` | |
 | `SESSION_ABSOLUTE_TIMEOUT` | `12h` | Must be at least the idle timeout. |
 | `COOKIE_SECURE` | `true` | Set `false` only for local plain HTTP. See [Reverse proxy](#reverse-proxy). |
@@ -261,21 +258,21 @@ is what a production deployment should run with.
 
 ## How a request flows through the system
 
-1. The parent application shows a button linking to this app with a 9-digit
-   client code and the salesperson's external `LOGIN`, signed and
-   time-limited — see [Entry link format](#entry-link-format).
-2. The link is parked server-side against a short-lived pre-session cookie and
-   the browser is sent to the login page (or straight to the form if already
-   signed in).
-3. **Authorization is by store, not by name.** The app account and the external
-   salesperson are never matched by their names:
-   - the `LOGIN` must exist in the external directory with `IS_WHO_SALER = 1`;
-   - that salesperson's store must match the `external_value` of one of the
-     signed-in account's stores;
-   - the client's store must also be one of the account's stores.
-
-   Any failure shows *Нямате достъп до този клиент.* and writes an audit entry.
+1. An administrator creates the salesperson's profile (email, password, stores).
+   There is no self-service: users cannot change or reset their own password —
+   only an administrator can.
+2. The salesperson signs in at `/login` with email and password. The login page
+   takes nothing from the URL. Right after a successful login the app starts
+   loading the clients of the account's stores from the external database in
+   the background (cached for `CLIENT_LIST_CACHE_TTL`).
+3. The home page searches those clients by code, name or object. Opening one
+   (`/clients/{code}`) shows its users with their modules, its pending
+   requests and the request form. **Authorization is by store**: the client's
+   store must be one of the account's stores, otherwise
+   *Нямате достъп до този клиент.* is shown and an audit entry is written.
    No client data is revealed on refusal.
+   The **Активни модули** page (`/modules`) lists all clients of the account's
+   stores that have an active module, in a searchable table.
 4. The salesperson picks usernames and modules, a start date and a duration,
    and submits. The request is stored as `pending` with a full snapshot of the
    client data, and the notification email is **queued**, not sent inline — a
@@ -388,69 +385,13 @@ client's object as well as their store, so `Client.Object` is set equal to
 The original specification left four things open (PLACEHOLDER-A through -D).
 All four are now resolved; nothing is left pending. See `DECISIONS.md` for how
 each one was settled, and the note above for -B and -C (the external queries).
--A (the entry link format) is documented in the next section, and -D
+-A (the entry link) no longer exists - the app is standalone - and -D
 (standalone client records) turned out not to be needed: the one thing this
 application must remember per client — whether its single test period is
 used — is already derived from `client_code` on the `requests` table
 (`store.DB.TestPeriodUsed`), not from a client entity, so a client is
 identified everywhere by its 9-digit code alone. `grep -rn PLACEHOLDER
 --include="*.go" .` finds only historical comments pointing at this section.
-
----
-
-## Entry link format
-
-The parent application links here with a 9-digit client code and the
-salesperson's external `LOGIN`, signed so a captured or guessed link cannot be
-replayed indefinitely:
-
-```
-GET /r/{code}/{login}?exp={unix_seconds}&sig={hex_hmac_sha256}
-```
-
-- `code` — the 9-digit client code, in the path, exactly as `CUSTOMER_NUMBER`.
-- `login` — the salesperson's external `LOGIN`, in the path, URL-encoded if it
-  contains characters that need it.
-- `exp` — a Unix timestamp (seconds) after which the link is refused. The
-  parent application chooses how far in the future this is (a few minutes is
-  plenty for a button click); the server only checks `exp` against the clock,
-  it does not enforce a maximum lifetime of its own.
-- `sig` — lowercase hex of `HMAC-SHA256(secret, code + "\n" + login + "\n" + exp)`,
-  where `exp` is signed as the exact same decimal string that appears in the
-  URL, and `secret` is the value of `ENTRY_LINK_SECRET`. Joining the three
-  fields with `\n` (rather than concatenating them directly) is what stops
-  `code="1", login="23"` from signing the same as `code="12", login="3"`.
-
-A request that is missing `exp` or `sig`, whose signature does not match, or
-whose `exp` has passed, is rejected the same way as a malformed link — the
-Bulgarian error page *Линкът не е валиден* — and the specific reason is never
-revealed to the browser (only logged), so a link cannot be probed for which
-part of it was wrong.
-
-**`ENTRY_LINK_SECRET`** is a separate secret from `APP_ENCRYPTION_KEY` (at
-least 16 random bytes, base64-encoded — generate one the same way, e.g.
-`openssl rand -base64 32`) and must be shared with whoever generates links in
-the parent application. Rotating it invalidates every link signed with the
-old value; there is no overlap period.
-
-**If the parent application does not sign its links**, set
-`ENTRY_LINK_SIGNING_ENABLED=false` to fall back to plain, unsigned
-`GET /r/{code}/{login}` links instead. Unlike `ADMIN_2FA_ENABLED`, this is
-allowed with `EXTERNAL_DB_MODE=mssql` too — it is a deliberate choice about
-what the parent application actually sends, not a dev-only convenience. A
-signed link is still the more defensible default where it's an option: it
-can't be replayed past its expiry or guessed, which a plain
-`{code}`/`{login}` pair can be.
-
-**For local testing without the parent application** (with signing left on),
-generate a real link with the bundled tool:
-  ```bash
-  docker compose exec app /app sign-link 000050431 YordanVuchkov 10m
-  ```
-  (or `go run ./cmd/app sign-link 000050431 YordanVuchkov 10m` outside Docker,
-  with `ENTRY_LINK_SECRET` and `APP_BASE_URL` set in the environment). It
-  prints a full, ready-to-open URL that expires after the given duration
-  (default 5 minutes).
 
 ---
 
@@ -656,7 +597,6 @@ internal/config/    environment configuration and validation
 internal/dates/     Europe/Sofia calendar arithmetic
 internal/demo/      seeded demo data (mock mode only)
 internal/email/     SMTP, templates, placeholders, the outbox worker
-internal/entrylink/ the signed entry-link parser
 internal/export/    the Excel generator
 internal/external/  the read-only external directory: interface, mssql/, mock/
 internal/http/      router, middleware, customer and admin handlers

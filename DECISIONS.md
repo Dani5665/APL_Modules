@@ -92,45 +92,26 @@ read-only credentials and every row unencrypted.
 
 ---
 
-## The entry link (PLACEHOLDER-A, resolved)
+## Standalone application (replaces the entry link, PLACEHOLDER-A)
 
-**Spec:** "The exact URL format and any signature/expiry validation will be
-specified later," behind a pluggable `EntryLinkParser`.
+The app was first designed to be opened from a parent application through a
+signed link (`GET /r/{code}/{login}`). It is now standalone: the link, its
+parser, `ENTRY_LINK_SECRET` / `ENTRY_LINK_SIGNING_ENABLED`, the `app sign-link`
+command and the parked-link table (dropped by migration 0003) are gone.
 
-**Done:** `GET /r/{code}/{login}?exp={unix_seconds}&sig={hex_hmac_sha256}`,
-where `sig` is `HMAC-SHA256(ENTRY_LINK_SECRET, code + "\n" + login + "\n" +
-exp)`. See README.md, "Entry link format", for the full contract the parent
-application must implement, and `internal/entrylink/entrylink.go` for
-`SignedParser`.
-
-**Why this shape:**
-- The three fields are signed together, newline-joined, so the signature
-  cannot be satisfied by mixing a valid code with a valid login taken from two
-  different links, and so a boundary shift (`code="1", login="23"` vs.
-  `code="12", login="3"`) cannot produce a colliding signature.
-- `exp` is a timestamp chosen by the caller, not a server-side TTL, because
-  the server has no way to know how long ago the parent application generated
-  the link before redirecting the browser to it.
-- Query parameters rather than another path segment or a single opaque token,
-  because it keeps `{code}` and `{login}` human-readable in logs and in the
-  existing route pattern, and keeps the parent application's job to one
-  well-known primitive (HMAC-SHA256) rather than a bespoke token format.
-- A toggle, `ENTRY_LINK_SIGNING_ENABLED`, exists only so local development and
-  the mock directory can keep using plain unsigned links without hand-signing
-  every URL; it follows the exact same safety rail as `ADMIN_2FA_ENABLED`
-  (refused when `EXTERNAL_DB_MODE=mssql`), for the same reason: a convenience
-  meant for a laptop must be structurally unable to reach a real deployment.
-- The `app sign-link` subcommand (`cmd/app/main.go`) exists so a valid signed
-  link can be produced for manual testing or ops without writing the HMAC
-  logic a second time anywhere.
-
-This is this project's own recommendation, not a contract the parent
-application's team has confirmed. If their actual constraints differ (for
-example, if links must be single-use, or if `exp` needs to be an opaque
-server-side token instead of a client-supplied timestamp), only
-`internal/entrylink/` and the one place `SignedParser` is constructed in
-`cmd/app/main.go` need to change — nothing else in the application depends on
-the URL shape.
+- **Login** is `/login` with email and password and ignores any URL parameter.
+- **Authorization** no longer involves the external salesperson record: a user
+  may open a client only when the client's store is one of the user's stores.
+  `Directory.GetSaler` is still part of the interface but nothing calls it.
+- **Passwords** are set by administrators only. The user-facing password
+  change and the "must change password on first login" gate were removed;
+  migration 0003 clears any flag left on existing accounts. The columns stay,
+  as the admin accounts still use them.
+- `requests.saler_login` is no longer filled (it stays in the schema as an
+  empty string; the admin request page no longer shows it).
+- The client list of the user's stores is preloaded in the background right
+  after login, and the home page fetches its results with htmx after it has
+  rendered, so it never waits for the external database.
 
 ## Standalone client records (PLACEHOLDER-D, resolved)
 
@@ -303,14 +284,11 @@ different rule on Bulgarian passwords than on English ones.
 
 ## The customer part
 
-### The entry link is consumed on submit
-
-Once a request is filed the parked link is deleted, so a refresh cannot file it
-again. Re-opening `/request` without a new link goes to the informational page.
-Combined with the server-side re-validation, this is what "prevent double
-submission" means beyond disabling the button.
-
 ### Authorization is re-checked on submit
+
+(The entry link no longer exists; a submission is for the client in the URL.
+Double submission is prevented by disabling the button and by server-side
+re-validation, e.g. the one-time test period.)
 
 The form being rendered is not treated as permission to post. Store
 assignments, the client's store and the salesperson's store are all checked

@@ -51,8 +51,7 @@
 
     <div class="field">
       <label for="q">Търсене</label>
-      <input type="search" id="q" name="q" value="{{.Filter.Search}}"
-             placeholder="Номер, име, обект или потребител">
+      <input type="search" id="q" name="q" value="{{.Filter.Search}}">
     </div>
 
     <div class="field field-narrow">
@@ -66,14 +65,12 @@
 
 {{define "activation_table"}}
 <div id="activation-table">
-  {{if .Activations}}
+  {{if .Groups}}
   <div class="table-wrap">
     <table>
+      <caption class="sr-only">Активации, групирани по клиенти</caption>
       <thead>
         <tr>
-          <th scope="col">Клиент</th>
-          <th scope="col">Обект</th>
-          <th scope="col">Магазин</th>
           <th scope="col">Потребител</th>
           <th scope="col">Модул</th>
           <th scope="col">Ниво</th>
@@ -83,16 +80,18 @@
           <th scope="col"></th>
         </tr>
       </thead>
+      {{range .Groups}}
       <tbody>
+        <tr class="group-head">
+          <th scope="rowgroup" colspan="7">
+            <span class="mono">{{.Code}}</span> — {{.Name}}
+            {{if .Object}}<span class="group-meta">Обект: {{.Object}}</span>{{end}}
+            {{if and .Store (ne .Store .Object)}}<span class="group-meta">Магазин: {{.Store}}</span>{{end}}
+          </th>
+        </tr>
         {{range .Activations}}
         <tr>
-          <td>
-            <div class="mono small">{{.ClientCode}}</div>
-            <div>{{.ClientName}}</div>
-          </td>
-          <td class="small">{{.ClientObject}}</td>
-          <td class="small">{{.ClientStore}}</td>
-          <td class="nowrap small">{{.Username}}</td>
+          <td class="nowrap group-indent">{{.Username}}</td>
           <td>{{moduleLabel .Module}}</td>
           <td>{{tierLabel .Module .Tier}}</td>
           <td class="nowrap">{{date .StartDate}}</td>
@@ -121,6 +120,7 @@
         </tr>
         {{end}}
       </tbody>
+      {{end}}
     </table>
   </div>
   {{template "pagination" .Page}}

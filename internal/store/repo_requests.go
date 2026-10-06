@@ -10,7 +10,7 @@ import (
 )
 
 const requestColumns = `r.id, r.client_code, r.client_name, r.client_object, r.client_store,
-	r.submitter_user_id, r.submitter_email, r.saler_login, r.test_period, r.start_date, r.months,
+	r.submitter_user_id, r.submitter_email, r.saler_login, r.test_period, r.start_date, r.months, r.unlimited,
 	r.status, r.admin_comment, r.decided_by_admin_id, r.decided_at, r.created_at, r.updated_at,
 	COALESCE(a.email, '')`
 
@@ -18,12 +18,16 @@ const requestFrom = ` FROM requests r LEFT JOIN admins a ON a.id = r.decided_by_
 
 func scanRequest(s interface{ Scan(...any) error }) (*Request, error) {
 	var r Request
+	var unlimited bool
 	err := s.Scan(&r.ID, &r.ClientCode, &r.ClientName, &r.ClientObject, &r.ClientStore,
-		&r.SubmitterUserID, &r.SubmitterEmail, &r.SalerLogin, &r.TestPeriod, &r.StartDate, &r.Months,
+		&r.SubmitterUserID, &r.SubmitterEmail, &r.SalerLogin, &r.TestPeriod, &r.StartDate, &r.Months, &unlimited,
 		&r.Status, &r.AdminComment, &r.DecidedByAdminID, &r.DecidedAt, &r.CreatedAt, &r.UpdatedAt,
 		&r.DecidedByEmail)
 	if err != nil {
 		return nil, classify(err)
+	}
+	if unlimited {
+		r.Months = 0
 	}
 	return &r, nil
 }
@@ -52,11 +56,11 @@ func (db *DB) CreateRequest(ctx context.Context, n NewRequest) (int64, error) {
 		res, err := tx.ExecContext(ctx,
 			`INSERT INTO requests
 				(client_code, client_name, client_object, client_store, submitter_user_id,
-				 submitter_email, saler_login, test_period, start_date, months, status,
+				 submitter_email, saler_login, test_period, start_date, months, unlimited, status,
 				 created_at, updated_at)
-			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			n.ClientCode, n.ClientName, n.ClientObject, n.ClientStore, nullInt64(n.SubmitterUserID),
-			n.SubmitterEmail, n.SalerLogin, n.TestPeriod, n.StartDate, n.Months, StatusPending,
+			n.SubmitterEmail, n.SalerLogin, n.TestPeriod, n.StartDate, max(n.Months, 1), n.Months == 0, StatusPending,
 			now, now)
 		if err != nil {
 			return classify(err)
@@ -73,9 +77,9 @@ func (db *DB) CreateRequest(ctx context.Context, n NewRequest) (int64, error) {
 func (db *DB) UpdateRequestDetails(ctx context.Context, id int64, testPeriod bool, startDate string, months int, usernames []string, mods []RequestModule) error {
 	return db.InTx(ctx, func(tx *sql.Tx) error {
 		if _, err := tx.ExecContext(ctx,
-			`UPDATE requests SET test_period = ?, start_date = ?, months = ?, updated_at = ?
+			`UPDATE requests SET test_period = ?, start_date = ?, months = ?, unlimited = ?, updated_at = ?
 			 WHERE id = ? AND status = ?`,
-			testPeriod, startDate, months, dates.NowUTC(), id, StatusPending); err != nil {
+			testPeriod, startDate, max(months, 1), months == 0, dates.NowUTC(), id, StatusPending); err != nil {
 			return classify(err)
 		}
 		return db.replaceRequestDetails(ctx, tx, id, usernames, mods)

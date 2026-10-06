@@ -1,0 +1,32 @@
+# Local run from the working tree (no Traefik, no registry image):
+#
+#   docker compose -f docker-compose.local.yml up -d --build
+#
+# Then open http://localhost:8080/login. Settings come from .env, with the
+# few values below overridden so plain HTTP on localhost works.
+name: haynesproform-local
+
+services:
+  app:
+    build: .
+    image: haynesproform-local:dev
+    env_file: .env
+    environment:
+      APP_BASE_URL: http://localhost:8080
+      COOKIE_SECURE: "false"
+      # Only used while no administrator exists yet in the local volume.
+      BOOTSTRAP_ADMIN_EMAIL: admin@example.com
+      BOOTSTRAP_ADMIN_PASSWORD: admin-parola-2026
+    ports:
+      - "8080:8080"
+    volumes:
+      - local-data:/data
+    healthcheck:
+      test: ["CMD", "/app", "healthcheck"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  local-data:

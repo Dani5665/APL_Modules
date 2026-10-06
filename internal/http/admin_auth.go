@@ -429,3 +429,9 @@ func (a *App) handleAdminPasswordChange(w http.ResponseWriter, r *http.Request) 
 		admin.Email, a.clientIP(r), nil)
 	redirectWithFlash(w, r, "/admin", "password_changed")
 }
+
+type passwordView struct {
+	view
+	Error  string
+	Forced bool
+}

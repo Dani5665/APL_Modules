@@ -2,10 +2,12 @@
 <html lang="bg">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#1f5fa9">
   <title>{{.Title}} — Админ панел</title>
   <link rel="stylesheet" href="/static/app.css?v={{.AssetVersion}}">
   <link rel="icon" href="/static/favicon.svg?v={{.AssetVersion}}" type="image/svg+xml">
+  <script src="/static/sidebar.js?v={{.AssetVersion}}"></script>
   <script src="/static/htmx.min.js?v={{.AssetVersion}}" defer></script>
   <script src="/static/app.js?v={{.AssetVersion}}" defer></script>
   <script src="/static/alpine.min.js?v={{.AssetVersion}}" defer></script>
@@ -13,10 +15,10 @@
 <body hx-headers='{"X-CSRF-Token": "{{.CSRF}}"}'>
   <a class="skip-link" href="#main">Към съдържанието</a>
 
-  <header class="site-header">
-    <div class="bar">
+  <div class="app-shell">
+    <aside id="sidebar" class="sidebar" aria-label="Меню">
       <a class="brand" href="/admin">Админ<span> панел</span></a>
-      <nav class="site-nav" aria-label="Основна навигация">
+      <nav class="side-nav" aria-label="Основна навигация">
         <a href="/admin/requests" {{if eq .ActivePage "requests"}}aria-current="page"{{end}}>
           Запитвания
           {{if gt .PendingRequests 0}}<span class="nav-badge" aria-label="чакащи запитвания">{{.PendingRequests}}</span>{{end}}
@@ -35,27 +37,38 @@
         <a href="/admin/audit" {{if eq .ActivePage "audit"}}aria-current="page"{{end}}>Одит</a>
       </nav>
       {{if .Admin}}
-      <div class="header-user">
-        <span>{{.Admin.Email}}</span>
-        <a href="/admin/password" class="btn btn-small">Смяна на парола</a>
-        <form method="post" action="/admin/logout" class="inline-form">
+      <div class="sidebar-user">
+        <span class="sidebar-email">{{.Admin.Email}}</span>
+        <a href="/admin/password" class="btn btn-small btn-block">Смяна на парола</a>
+        <form method="post" action="/admin/logout">
           <input type="hidden" name="csrf_token" value="{{.CSRF}}">
-          <button type="submit" class="btn btn-small">Изход</button>
+          <button type="submit" class="btn btn-small btn-block">Изход</button>
         </form>
       </div>
       {{end}}
-    </div>
-  </header>
+    </aside>
+    <div class="sidebar-backdrop" data-sidebar-close></div>
 
-  <main id="main">
-    {{if .MockMode}}
-    <div class="alert alert-warning" role="status">
-      Приложението работи с <strong>примерни данни</strong> за външната база
-      (<code>EXTERNAL_DB_MODE=mock</code>). Данните за клиенти не са реални.
+    <div class="app-main">
+      <header class="topbar">
+        <button type="button" class="menu-toggle" data-sidebar-toggle
+                aria-controls="sidebar" aria-expanded="true" aria-label="Покажи или скрий менюто">
+          <span class="menu-icon" aria-hidden="true"></span>
+        </button>
+        <span class="topbar-title">{{.Title}}</span>
+      </header>
+
+      <main id="main">
+        {{if .MockMode}}
+        <div class="alert alert-warning" role="status">
+          Приложението работи с <strong>примерни данни</strong> за външната база
+          (<code>EXTERNAL_DB_MODE=mock</code>). Данните за клиенти не са реални.
+        </div>
+        {{end}}
+        {{template "flash" .}}
+        {{template "content" .}}
+      </main>
     </div>
-    {{end}}
-    {{template "flash" .}}
-    {{template "content" .}}
-  </main>
+  </div>
 </body>
 </html>{{end}}

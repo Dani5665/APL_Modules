@@ -5,8 +5,6 @@ package main
 
 import (
 	"context"
-	"encoding/base64"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -14,8 +12,6 @@ import (
 	"os"
 	"os/signal"
 	"runtime/debug"
-	"strconv"
-	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -29,7 +25,6 @@ import (
 	"haynesproform/internal/config"
 	"haynesproform/internal/demo"
 	"haynesproform/internal/email"
-	"haynesproform/internal/entrylink"
 	"haynesproform/internal/export"
 	"haynesproform/internal/external"
 	mockdir "haynesproform/internal/external/mock"
@@ -45,9 +40,6 @@ func main() {
 	// shell or curl for Docker's HEALTHCHECK to call.
 	if len(os.Args) > 1 && os.Args[1] == "healthcheck" {
 		os.Exit(runHealthcheck())
-	}
-	if len(os.Args) > 1 && os.Args[1] == "sign-link" {
-		os.Exit(runSignLink(os.Args[2:]))
 	}
 
 	if err := run(); err != nil {
@@ -132,7 +124,6 @@ func run() error {
 		Outbox:    outbox,
 		Export:    generator,
 		Scheduler: sched,
-		EntryLink: entryLinkParser(cfg),
 		Log:       log,
 	}
 
@@ -213,16 +204,6 @@ func openDirectory(ctx context.Context, cfg config.Config, log *slog.Logger) (ex
 		return external.NewCached(dir, cfg.ClientListCacheTTL), nil
 	}
 	return nil, fmt.Errorf("unsupported EXTERNAL_DB_MODE %q", cfg.ExternalMode)
-}
-
-// entryLinkParser selects the entry-link parser per ENTRY_LINK_SIGNING_ENABLED
-// (see config.Config and README.md, "Entry link format"). config.Load already
-// refuses to start with signing off against EXTERNAL_DB_MODE=mssql.
-func entryLinkParser(cfg config.Config) entrylink.EntryLinkParser {
-	if !cfg.EntryLinkSigningEnabled {
-		return entrylink.PathParser{}
-	}
-	return entrylink.SignedParser{Secret: cfg.EntryLinkSecret}
 }
 
 // bootstrapAdmin creates the first administrator from the environment when no
@@ -396,70 +377,4 @@ func runHealthcheck() int {
 		return 1
 	}
 	return 0
-}
-
-// runSignLink is the `app sign-link` subcommand: given a client code and a
-// salesperson login, it prints a valid, signed entry link path for manual
-// testing, using ENTRY_LINK_SECRET and APP_BASE_URL from the environment
-// exactly as the running server would validate them. The parent application
-// is expected to sign links the same way - see README.md, "Entry link
-// format" - this command exists only so a signed link can be produced
-// without writing that code twice.
-func runSignLink(args []string) int {
-	if len(args) < 2 {
-		fmt.Fprintln(os.Stderr, "usage: app sign-link <9-digit-client-code> <saler-login> [ttl, e.g. 5m; default 5m]")
-		return 2
-	}
-	code, login := args[0], args[1]
-
-	ttl := 5 * time.Minute
-	if len(args) >= 3 {
-		d, err := time.ParseDuration(args[2])
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "sign-link: invalid ttl %q: %v\n", args[2], err)
-			return 2
-		}
-		ttl = d
-	}
-
-	raw := strings.TrimSpace(os.Getenv("ENTRY_LINK_SECRET"))
-	if raw == "" {
-		fmt.Fprintln(os.Stderr, "sign-link: ENTRY_LINK_SECRET is not set in the environment")
-		return 2
-	}
-	secret, err := decodeConfigBase64(raw)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "sign-link: ENTRY_LINK_SECRET is not valid base64: %v\n", err)
-		return 2
-	}
-
-	if _, err := entrylink.Validate(code, login); err != nil {
-		fmt.Fprintf(os.Stderr, "sign-link: %v\n", err)
-		return 2
-	}
-
-	exp := strconv.FormatInt(time.Now().Add(ttl).Unix(), 10)
-	sig := hex.EncodeToString(entrylink.Sign(secret, code, login, exp))
-
-	base := strings.TrimRight(strings.TrimSpace(os.Getenv("APP_BASE_URL")), "/")
-	fmt.Printf("%s/r/%s/%s?exp=%s&sig=%s\n", base, code, login, exp, sig)
-	fmt.Fprintf(os.Stderr, "(expires in %s)\n", ttl)
-	return 0
-}
-
-// decodeConfigBase64 mirrors config.decodeBase64 (unexported there): it
-// accepts standard or URL-safe base64, padded or not.
-func decodeConfigBase64(s string) ([]byte, error) {
-	encodings := []*base64.Encoding{
-		base64.StdEncoding, base64.RawStdEncoding,
-		base64.URLEncoding, base64.RawURLEncoding,
-	}
-	var err error
-	for _, enc := range encodings {
-		var b []byte
-		if b, err = enc.DecodeString(s); err == nil {
-			return b, nil
-		}
-	}
-	return nil, err
 }

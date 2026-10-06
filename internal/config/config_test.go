@@ -19,7 +19,6 @@ func baseEnv() map[string]string {
 		"APP_BASE_URL":          "http://localhost:8080",
 		"EXTERNAL_DB_MODE":      "mock",
 		"APP_ENCRYPTION_KEY":    "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=", // 32 raw bytes, base64
-		"ENTRY_LINK_SECRET":     "MDEyMzQ1Njc4OWFiY2RlZg==",                     // 16 raw bytes, base64
 		"COOKIE_SECURE":         "false",
 		"BOOTSTRAP_ADMIN_EMAIL": "",
 	}
@@ -73,50 +72,5 @@ func TestLoadRejectsAnInvalid2FAFlag(t *testing.T) {
 
 	if _, err := Load(); err == nil {
 		t.Fatal("Load accepted an invalid ADMIN_2FA_ENABLED value")
-	}
-}
-
-func TestLoadDefaultsToEntryLinkSigningEnabled(t *testing.T) {
-	withEnv(t, baseEnv())
-	cfg, err := Load()
-	if err != nil {
-		t.Fatalf("Load: %v", err)
-	}
-	if !cfg.EntryLinkSigningEnabled {
-		t.Error("EntryLinkSigningEnabled defaulted to false, want true")
-	}
-	if len(cfg.EntryLinkSecret) != 16 {
-		t.Errorf("EntryLinkSecret decoded to %d bytes, want 16", len(cfg.EntryLinkSecret))
-	}
-}
-
-func TestLoadRequiresEntryLinkSecretWhenSigningEnabled(t *testing.T) {
-	env := baseEnv()
-	env["ENTRY_LINK_SECRET"] = ""
-	withEnv(t, env)
-
-	if _, err := Load(); err == nil {
-		t.Fatal("Load accepted a missing ENTRY_LINK_SECRET with signing enabled")
-	}
-}
-
-// TestLoadAllowsEntryLinkSigningDisabledAgainstMSSQL is unlike the 2FA
-// safety rail: a deployment may deliberately run unsigned entry links
-// against a real external directory, e.g. because the parent application
-// does not sign its links - see README.md, "Entry link format".
-func TestLoadAllowsEntryLinkSigningDisabledAgainstMSSQL(t *testing.T) {
-	env := baseEnv()
-	env["EXTERNAL_DB_MODE"] = "mssql"
-	env["MSSQL_DSN"] = "sqlserver://user:pass@host:1433?database=db"
-	env["ENTRY_LINK_SIGNING_ENABLED"] = "false"
-	env["ENTRY_LINK_SECRET"] = ""
-	withEnv(t, env)
-
-	cfg, err := Load()
-	if err != nil {
-		t.Fatalf("Load: %v", err)
-	}
-	if cfg.EntryLinkSigningEnabled {
-		t.Error("EntryLinkSigningEnabled = true, want false")
 	}
 }

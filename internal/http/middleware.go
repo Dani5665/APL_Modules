@@ -140,13 +140,6 @@ func (a *App) requireUser(next http.HandlerFunc) http.HandlerFunc {
 		if !a.enforceCSRF(w, r, s.CSRFToken) {
 			return
 		}
-		// A forced password change blocks every page but the change form and
-		// logout, not only the handlers that happen to check it after login -
-		// otherwise a bookmark or a stale link lets the account skip it.
-		if u.MustChangePassword && r.URL.Path != "/password" && r.URL.Path != "/logout" {
-			a.redirectToPage(w, r, "/password")
-			return
-		}
 		next(w, r)
 	}
 }

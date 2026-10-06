@@ -107,7 +107,7 @@ func ValidateInput(s Selection, availableUsernames []string, testPeriodUsed bool
 	if s.HaynesPro && !modules.ValidTier(modules.HaynesPro, s.HaynesProTier) {
 		v.Add("Изберете ниво за HaynesPro.")
 	}
-	if s.Months < 1 || s.Months > 12 {
+	if s.Months < 0 || s.Months > 12 { // 0 = no end date
 		v.Add("Изберете период на активация.")
 	}
 
@@ -167,20 +167,15 @@ var (
 	ErrNoAccess = errors.New("requests: not authorized for this client")
 )
 
-// CheckStoreAccess implements the authorization rule of section 6.2: the app
-// account and the external salesperson are linked only by store.
-//
-// Both the salesperson's store and the client's store must be among the
-// logged-in account's stores. The caller has already fetched both records.
-func CheckStoreAccess(user *store.User, salerStore, clientStore string) error {
+// CheckStoreAccess is the authorization rule for opening a client: the
+// client's store must be one of the logged-in account's stores. The caller
+// has already fetched the client.
+func CheckStoreAccess(user *store.User, clientStore string) error {
 	if user == nil || !user.Active {
 		return fmt.Errorf("%w: account is not active", ErrNoAccess)
 	}
 	if len(user.Stores) == 0 {
 		return fmt.Errorf("%w: account has no stores assigned", ErrNoAccess)
-	}
-	if !user.HasStoreValue(salerStore) {
-		return fmt.Errorf("%w: salesperson store %q is not one of the account's stores", ErrNoAccess, salerStore)
 	}
 	if !user.HasStoreValue(clientStore) {
 		return fmt.Errorf("%w: client store %q is not one of the account's stores", ErrNoAccess, clientStore)

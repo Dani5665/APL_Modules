@@ -39,8 +39,8 @@ func TestEndDateRejectsBadInput(t *testing.T) {
 	if _, err := EndDate("15.01.2026", 1); err == nil {
 		t.Error("expected an error for a non-ISO start date")
 	}
-	if _, err := EndDate("2026-01-15", 0); err == nil {
-		t.Error("expected an error for zero months")
+	if _, err := EndDate("2026-01-15", -1); err == nil {
+		t.Error("expected an error for negative months")
 	}
 }
 
@@ -69,3 +69,13 @@ func TestFormatDisplay(t *testing.T) {
 }
 
 func monthOf(m int) time.Month { return time.Month(m) }
+
+func TestEndDateWithoutALimit(t *testing.T) {
+	got, err := EndDate("2026-01-15", 0)
+	if err != nil || got != NoEndDate {
+		t.Fatalf("EndDate(.., 0) = %q, %v; want %q", got, err, NoEndDate)
+	}
+	if FormatDisplay(NoEndDate) != "Без крайна дата" {
+		t.Errorf("FormatDisplay(NoEndDate) = %q", FormatDisplay(NoEndDate))
+	}
+}

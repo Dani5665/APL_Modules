@@ -61,62 +61,11 @@ func (db *DB) DeleteSessionsFor(ctx context.Context, t SubjectType, id int64) er
 	return classify(err)
 }
 
-// PurgeExpired removes sessions and parked entry links that are past their
-// expiry, together with idle sessions. It is called periodically.
+// PurgeExpired removes sessions that are past their expiry, together with
+// idle sessions. It is called periodically.
 func (db *DB) PurgeExpired(ctx context.Context, idleCutoff time.Time) error {
-	now := dates.NowUTC()
-	if _, err := db.ExecContext(ctx,
-		`DELETE FROM sessions WHERE expires_at <= ? OR last_seen_at <= ?`,
-		now, dates.FormatUTC(idleCutoff)); err != nil {
-		return classify(err)
-	}
-	_, err := db.ExecContext(ctx, `DELETE FROM pending_entry_links WHERE expires_at <= ?`, now)
-	return classify(err)
-}
-
-// PendingEntryLink is an entry link parked until the salesperson logs in.
-type PendingEntryLink struct {
-	ClientCode string
-	SalerLogin string
-}
-
-// CreatePendingEntryLink parks an entry link against a pre-session token.
-func (db *DB) CreatePendingEntryLink(ctx context.Context, tokenHash, clientCode, salerLogin string, expiresAt time.Time) error {
 	_, err := db.ExecContext(ctx,
-		`INSERT INTO pending_entry_links (token_hash, client_code, saler_login, created_at, expires_at)
-		 VALUES (?, ?, ?, ?, ?)
-		 ON CONFLICT(token_hash) DO UPDATE SET
-		     client_code = excluded.client_code,
-		     saler_login = excluded.saler_login,
-		     expires_at  = excluded.expires_at`,
-		tokenHash, clientCode, salerLogin, dates.NowUTC(), dates.FormatUTC(expiresAt))
+		`DELETE FROM sessions WHERE expires_at <= ? OR last_seen_at <= ?`,
+		dates.NowUTC(), dates.FormatUTC(idleCutoff))
 	return classify(err)
-}
-
-// TakePendingEntryLink returns a parked entry link and removes it, so an
-// entry link is consumed exactly once.
-func (db *DB) TakePendingEntryLink(ctx context.Context, tokenHash string) (*PendingEntryLink, error) {
-	var l PendingEntryLink
-	err := db.QueryRowContext(ctx,
-		`DELETE FROM pending_entry_links
-		 WHERE token_hash = ? AND expires_at > ?
-		 RETURNING client_code, saler_login`,
-		tokenHash, dates.NowUTC()).Scan(&l.ClientCode, &l.SalerLogin)
-	if err != nil {
-		return nil, classify(err)
-	}
-	return &l, nil
-}
-
-// PeekPendingEntryLink returns a parked entry link without consuming it.
-func (db *DB) PeekPendingEntryLink(ctx context.Context, tokenHash string) (*PendingEntryLink, error) {
-	var l PendingEntryLink
-	err := db.QueryRowContext(ctx,
-		`SELECT client_code, saler_login FROM pending_entry_links
-		 WHERE token_hash = ? AND expires_at > ?`,
-		tokenHash, dates.NowUTC()).Scan(&l.ClientCode, &l.SalerLogin)
-	if err != nil {
-		return nil, classify(err)
-	}
-	return &l, nil
 }

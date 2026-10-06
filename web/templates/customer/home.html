@@ -1,41 +1,60 @@
 {{define "content"}}
 <div class="page-head">
   <div>
-    <h1>Клиенти на моите магазини</h1>
+    <h1>Клиенти</h1>
     <p class="muted">
-      {{range $i, $s := .User.Stores}}{{if $i}}, {{end}}{{$s.Name}}{{else}}Няма зададени магазини.{{end}}
+      Клиенти на {{range $i, $s := .User.Stores}}{{if $i}}, {{end}}{{$s.Name}}{{else}}— няма зададени магазини{{end}}
     </p>
   </div>
 </div>
 
-<div class="alert alert-info" role="status">
-  Запитванията за активация се започват от основното приложение — отворете
-  клиента там и използвайте бутона за заявка.
-</div>
-
-{{if .ClientsUnavailable}}
-<div class="alert alert-error" role="alert">
-  Списъкът с клиенти не може да бъде зареден в момента. Опитайте отново по-късно.
-</div>
-{{end}}
-
 <div class="card">
-  <h2 class="card-title">Клиенти с активни модули</h2>
-  <p class="hint">Показват се само клиенти, на които има поне един активен модул.</p>
-
   <div class="field">
-    <label for="client-search">Търсене по клиентски номер, име, обект или потребител</label>
+    <label for="client-search">Търсене по клиентски номер, име или обект</label>
     <input type="search" id="client-search" name="q" value="{{.Search}}"
-           placeholder="Например 100000001 или Балкан"
-           hx-get="/clients"
+           autocomplete="off" autofocus
+           hx-get="/clients/search"
            hx-trigger="input changed delay:300ms, search"
-           hx-target="#client-list"
-           hx-select="#client-list"
+           hx-target="#client-results"
+           hx-select="#client-results"
            hx-swap="outerHTML"
            hx-indicator="#client-search-indicator">
     <span id="client-search-indicator" class="htmx-indicator hint">Търсене…</span>
   </div>
 
-  {{template "client_list" .}}
+  {{/* Loaded as soon as the page is up, so the page never waits for the
+       external database. */}}
+  <div id="client-results" hx-get="{{.LoadURL}}" hx-trigger="load" hx-swap="outerHTML">
+    <p class="empty">Зареждане на клиентите…</p>
+  </div>
+</div>
+{{end}}
+
+{{define "client_results"}}
+<div id="client-results">
+  {{if .Unavailable}}
+  <div class="alert alert-error" role="alert">
+    Списъкът с клиенти не може да бъде зареден в момента. Опитайте отново по-късно.
+  </div>
+  {{else if .Clients}}
+  <ul class="client-cards">
+    {{range .Clients}}
+    <li>
+      <a class="client-card" href="/clients/{{.Code}}">
+        <span class="client-card-name">{{.Name}}</span>
+        <span class="client-card-meta">
+          <span class="mono">{{.Code}}</span>
+          {{if .Object}}<span>{{.Object}}</span>{{end}}
+        </span>
+      </a>
+    </li>
+    {{end}}
+  </ul>
+  {{template "pagination" .ClientPage}}
+  {{else}}
+  <p class="empty">
+    {{if .Search}}Няма намерени клиенти по това търсене.{{else}}Няма клиенти за вашите магазини.{{end}}
+  </p>
+  {{end}}
 </div>
 {{end}}

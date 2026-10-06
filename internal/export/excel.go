@@ -210,7 +210,7 @@ func writeFlat(sw *excelize.StreamWriter, rows []store.Activation, today string,
 			modules.Label(a.Module),
 			modules.TierLabel(a.Module, a.Tier),
 			excelize.Cell{StyleID: st.date, Value: asExcelTime(start)},
-			excelize.Cell{StyleID: st.date, Value: asExcelTime(end)},
+			endCell(a, end, st),
 			a.StatusOn(today).Label(),
 		}
 		cell, err := excelize.CoordinatesToCellName(1, i+2)
@@ -293,7 +293,7 @@ func writeGrouped(sw *excelize.StreamWriter, rows []store.Activation, today stri
 			modules.Label(a.Module),
 			modules.TierLabel(a.Module, a.Tier),
 			excelize.Cell{StyleID: st.date, Value: asExcelTime(start)},
-			excelize.Cell{StyleID: st.date, Value: asExcelTime(end)},
+			endCell(a, end, st),
 			a.StatusOn(today).Label(),
 		}
 		cell, err := excelize.CoordinatesToCellName(1, rowNum)
@@ -386,3 +386,12 @@ func bottomBorder() []excelize.Border {
 
 func strPtr(s string) *string { return &s }
 func boolPtr(b bool) *bool    { return &b }
+
+// endCell is the "До дата" cell: a date, or the text "Без крайна дата" for an
+// activation without an end date.
+func endCell(a store.Activation, end time.Time, st styles) excelize.Cell {
+	if a.EndDate == dates.NoEndDate {
+		return excelize.Cell{Value: dates.NoEndDateLabel}
+	}
+	return excelize.Cell{StyleID: st.date, Value: asExcelTime(end)}
+}

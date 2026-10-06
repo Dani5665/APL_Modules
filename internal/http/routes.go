@@ -20,20 +20,18 @@ func (a *App) routeCommon(mux *http.ServeMux) {
 
 // routeCustomer registers the salesperson-facing routes.
 func (a *App) routeCustomer(mux *http.ServeMux) {
-	// TODO(PLACEHOLDER-A): the final entry-link route and its signature check.
-	mux.HandleFunc("GET /r/{code}/{login}", a.handleEntryLink)
-
 	mux.HandleFunc("GET /login", a.handleUserLoginForm)
 	mux.HandleFunc("POST /login", a.handleUserLogin)
 	mux.HandleFunc("POST /logout", a.requireUser(a.handleUserLogout))
 
+	// Passwords are set by administrators only; there is no user-facing
+	// password change or reset.
 	mux.HandleFunc("GET /{$}", a.requireUser(a.handleHome))
-	mux.HandleFunc("GET /request", a.requireUser(a.handleRequestForm))
-	mux.HandleFunc("POST /request", a.requireUser(a.handleRequestSubmit))
-	mux.HandleFunc("GET /clients", a.requireUser(a.handleClientList))
-
-	mux.HandleFunc("GET /password", a.requireUser(a.handleUserPasswordForm))
-	mux.HandleFunc("POST /password", a.requireUser(a.handleUserPasswordChange))
+	mux.HandleFunc("GET /clients/search", a.requireUser(a.handleClientSearch))
+	mux.HandleFunc("GET /clients/{code}", a.requireUser(a.handleClient))
+	mux.HandleFunc("POST /clients/{code}/request", a.requireUser(a.handleRequestSubmit))
+	mux.HandleFunc("GET /modules", a.requireUser(a.handleModules))
+	mux.HandleFunc("GET /modules/list", a.requireUser(a.handleModulesList))
 
 	// Anything else under the customer part renders the Bulgarian 404 page.
 	mux.HandleFunc("/", a.notFoundOrAdmin)

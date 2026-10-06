@@ -20,13 +20,9 @@
       <label for="password">Парола</label>
       <input type="password" id="password" name="password" minlength="10"
              autocomplete="new-password" required>
-      <p class="hint">Минимум 10 знака. Потребителят не може сам да я възстанови.</p>
+      <p class="hint">Минимум 10 знака. Потребителят не може сам да я смени или възстанови – само администратор.</p>
     </div>
 
-    <div class="check">
-      <input type="checkbox" id="must_change_password" name="must_change_password" value="1" checked>
-      <label for="must_change_password">Изискай смяна на паролата при първи вход</label>
-    </div>
 
     <fieldset>
       <legend>Магазини</legend>
@@ -81,10 +77,6 @@
       <input type="password" id="password" name="password" minlength="10"
              autocomplete="new-password" required>
       <p class="hint">Минимум 10 знака. Всички сесии на потребителя ще бъдат прекратени.</p>
-    </div>
-    <div class="check">
-      <input type="checkbox" id="must_change_password" name="must_change_password" value="1" checked>
-      <label for="must_change_password">Изискай смяна при следващ вход</label>
     </div>
     <div class="form-actions">
       <button type="submit" class="btn btn-primary">Смени паролата</button>

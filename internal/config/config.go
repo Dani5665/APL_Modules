@@ -52,16 +52,6 @@ type Config struct {
 	// against a real deployment by mistake - see DECISIONS.md.
 	Admin2FAEnabled bool
 
-	// EntryLinkSigningEnabled gates whether the entry link
-	// (GET /r/{code}/{login}) must carry a valid HMAC signature and expiry.
-	// It defaults to true and, like Admin2FAEnabled, may only be turned off
-	// when EXTERNAL_DB_MODE=mock - see README.md ("Entry link format").
-	EntryLinkSigningEnabled bool
-	// EntryLinkSecret is the raw HMAC-SHA256 key (ENTRY_LINK_SECRET) the
-	// parent application signs entry links with. Required when
-	// EntryLinkSigningEnabled is true.
-	EntryLinkSecret []byte
-
 	ClientListCacheTTL time.Duration
 
 	LogLevel slog.Level
@@ -127,29 +117,6 @@ func Load() (Config, error) {
 		} else {
 			c.EncryptionKey = key
 		}
-	}
-
-	// Unlike Admin2FAEnabled, this is not restricted to EXTERNAL_DB_MODE=mock:
-	// the parent application may simply not sign its entry links, which is a
-	// deliberate per-deployment choice rather than a dev-only convenience -
-	// see README.md, "Entry link format".
-	signingEnabled, err := boolOr("ENTRY_LINK_SIGNING_ENABLED", true)
-	if err != nil {
-		fail("ENTRY_LINK_SIGNING_ENABLED: %v", err)
-	}
-	c.EntryLinkSigningEnabled = signingEnabled
-	if raw := strings.TrimSpace(os.Getenv("ENTRY_LINK_SECRET")); raw != "" {
-		key, err := decodeBase64(raw)
-		if err != nil {
-			fail("ENTRY_LINK_SECRET is not valid base64: %v", err)
-		} else if len(key) < 16 {
-			fail("ENTRY_LINK_SECRET must decode to at least 16 bytes, got %d", len(key))
-		} else {
-			c.EntryLinkSecret = key
-		}
-	} else if c.EntryLinkSigningEnabled {
-		fail("ENTRY_LINK_SECRET is required (at least 16 random bytes, base64-encoded) " +
-			"when ENTRY_LINK_SIGNING_ENABLED is true")
 	}
 
 	c.SessionIdleTimeout = durationOr(&errs, "SESSION_IDLE_TIMEOUT", 2*time.Hour)

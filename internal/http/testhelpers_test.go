@@ -17,7 +17,6 @@ import (
 	"haynesproform/internal/config"
 	"haynesproform/internal/dates"
 	"haynesproform/internal/email"
-	"haynesproform/internal/entrylink"
 	"haynesproform/internal/export"
 	"haynesproform/internal/external"
 	"haynesproform/internal/external/mock"
@@ -115,7 +114,6 @@ func newHarnessWithConfig(t *testing.T, mutate func(*config.Config)) *harness {
 		Outbox:    outbox,
 		Export:    generator,
 		Scheduler: scheduler.New(db, generator, composer, auditLog, log, outbox.Notify),
-		EntryLink: entrylink.PathParser{},
 		Log:       log,
 	}
 
@@ -353,12 +351,6 @@ func (h *harness) loginAdmin(admin *store.Admin) *session {
 	}
 	s.refreshCSRF(auth.AdminAudience)
 	return s
-}
-
-// followEntryLink visits the entry link so the request form has a client.
-func (s *session) followEntryLink(code, login string) *httptest.ResponseRecorder {
-	s.h.t.Helper()
-	return s.get("/r/" + code + "/" + login)
 }
 
 // assertStatus fails the test unless the recorder carries the wanted status.
