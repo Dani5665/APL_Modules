@@ -121,3 +121,16 @@ func DisplayTimestamp(s string) string {
 	}
 	return t.In(Sofia).Format("02.01.2006 15:04")
 }
+
+// NextDailyAt returns the next moment, strictly after now, at which the clock
+// in the business time zone reads hour:00. It follows the Sofia wall clock
+// across daylight saving changes.
+func NextDailyAt(now time.Time, hour int) time.Time {
+	local := now.In(Sofia)
+	y, m, d := local.Date()
+	next := time.Date(y, m, d, hour, 0, 0, 0, Sofia)
+	if !next.After(now) {
+		next = time.Date(y, m, d+1, hour, 0, 0, 0, Sofia)
+	}
+	return next
+}

@@ -139,6 +139,13 @@ func templateFuncs() template.FuncMap {
 		"join": func(sep string, items []string) string {
 			return strings.Join(items, sep)
 		},
+		// dash shows "-" for an empty value.
+		"dash": func(s string) string {
+			if strings.TrimSpace(s) == "" {
+				return "-"
+			}
+			return s
+		},
 		"yesno": func(b bool) string {
 			if b {
 				return "Да"

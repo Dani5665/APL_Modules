@@ -50,16 +50,30 @@
       </div>
 
       <div class="field field-narrow">
-        <label for="time_hhmm">Час (Europe/Sofia)</label>
-        <input type="time" id="time_hhmm" name="time_hhmm" value="{{.Schedule.TimeHHMM}}" required>
+        <span class="label" id="time-label">Час (Europe/Sofia, 24 ч.)</span>
+        <div class="time-24" role="group" aria-labelledby="time-label">
+          <select id="hour" name="hour" aria-label="Часове">
+            {{range $h := seq 0 23}}<option value="{{printf "%02d" $h}}" {{if eq $.Hour $h}}selected{{end}}>{{printf "%02d" $h}}</option>{{end}}
+          </select>
+          <span aria-hidden="true">:</span>
+          <select id="minute" name="minute" aria-label="Минути">
+            {{range $m := seq 0 59}}<option value="{{printf "%02d" $m}}" {{if eq $.Minute $m}}selected{{end}}>{{printf "%02d" $m}}</option>{{end}}
+          </select>
+        </div>
       </div>
     </div>
 
     <div class="field">
-      <label for="recipients">Получатели</label>
-      <textarea id="recipients" name="recipients" rows="4"
-                placeholder="upravitel@example.com">{{.RecipientsRaw}}</textarea>
-      <p class="hint">Един адрес на ред (или разделени със запетая).</p>
+      <span class="label">Получатели</span>
+      {{if .Recipients}}
+      <p>{{join ", " .Recipients}}</p>
+      {{else}}
+      <p class="muted">Няма зададени получатели.</p>
+      {{end}}
+      <p class="hint">
+        Получателите се задават в шаблона
+        <a href="/admin/settings/templates/scheduled_export">Месечна справка</a>.
+      </p>
     </div>
 
     <div class="check">

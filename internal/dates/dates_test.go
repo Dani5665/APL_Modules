@@ -79,3 +79,29 @@ func TestEndDateWithoutALimit(t *testing.T) {
 		t.Errorf("FormatDisplay(NoEndDate) = %q", FormatDisplay(NoEndDate))
 	}
 }
+
+func TestNextDailyAt(t *testing.T) {
+	at := func(s string) time.Time {
+		t.Helper()
+		v, err := time.ParseInLocation("2006-01-02 15:04:05", s, Sofia)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return v
+	}
+	tests := []struct{ now, want string }{
+		{"2026-10-14 09:30:00", "2026-10-14 20:00:00"}, // earlier today
+		{"2026-10-14 19:59:59", "2026-10-14 20:00:00"},
+		{"2026-10-14 20:00:00", "2026-10-15 20:00:00"}, // exactly now: tomorrow
+		{"2026-10-14 23:10:00", "2026-10-15 20:00:00"},
+		{"2026-12-31 21:00:00", "2027-01-01 20:00:00"}, // year end
+		{"2026-03-28 21:00:00", "2026-03-29 20:00:00"}, // the day clocks go forward
+		{"2026-10-24 21:00:00", "2026-10-25 20:00:00"}, // the day clocks go back
+	}
+	for _, tt := range tests {
+		got := NextDailyAt(at(tt.now), 20)
+		if !got.Equal(at(tt.want)) || got.In(Sofia).Hour() != 20 {
+			t.Errorf("NextDailyAt(%s) = %s, want %s", tt.now, got.In(Sofia), tt.want)
+		}
+	}
+}

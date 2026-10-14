@@ -391,7 +391,7 @@ func TestApproveQueuesTheEmailToTheSubmitterOnly(t *testing.T) {
 	h := newHarness(t)
 	ctx := context.Background()
 
-	if err := h.db.SetSetting(ctx, store.KeyNotifyRecipients, "admin-notify@example.com"); err != nil {
+	if err := h.db.SetTemplateRecipients(ctx, "request_created", "admin-notify@example.com", dates.NowUTC()); err != nil {
 		t.Fatalf("set recipients: %v", err)
 	}
 
@@ -675,6 +675,7 @@ func TestAdminUserManagement(t *testing.T) {
 
 	rec := s.post("/admin/users", url.Values{
 		"email":    {"nov@example.com"},
+		"name":     {"Тест Име"},
 		"password": {"nova-parola-123"},
 		"stores":   {strconv.FormatInt(stores[0].ID, 10)},
 	})
@@ -691,6 +692,7 @@ func TestAdminUserManagement(t *testing.T) {
 	// A duplicate email is refused with a Bulgarian message.
 	rec = s.post("/admin/users", url.Values{
 		"email":    {"nov@example.com"},
+		"name":     {"Тест Име"},
 		"password": {"nova-parola-123"},
 		"stores":   {strconv.FormatInt(stores[0].ID, 10)},
 	})
@@ -700,6 +702,7 @@ func TestAdminUserManagement(t *testing.T) {
 	// So is a username that is not an email address.
 	rec = s.post("/admin/users", url.Values{
 		"email":    {"not-an-email"},
+		"name":     {"Тест Име"},
 		"password": {"nova-parola-123"},
 		"stores":   {strconv.FormatInt(stores[0].ID, 10)},
 	})
@@ -709,6 +712,7 @@ func TestAdminUserManagement(t *testing.T) {
 	// And a password below the minimum length.
 	rec = s.post("/admin/users", url.Values{
 		"email":    {"drug@example.com"},
+		"name":     {"Тест Име"},
 		"password": {"kratka"},
 		"stores":   {strconv.FormatInt(stores[0].ID, 10)},
 	})
@@ -794,7 +798,7 @@ func TestAdminSMTPSettingsRoundTrip(t *testing.T) {
 	page := s.get("/admin/settings/smtp")
 	assertStatus(t, page, http.StatusOK)
 	assertNotContains(t, page, "tajna-parola")
-	assertContains(t, page, "smtp.example.com", "admin@example.com")
+	assertContains(t, page, "smtp.example.com")
 
 	// Saving with an empty password keeps the stored one.
 	assertStatus(t, s.post("/admin/settings/smtp", url.Values{
@@ -807,19 +811,6 @@ func TestAdminSMTPSettingsRoundTrip(t *testing.T) {
 	if again != sealed {
 		t.Error("an empty password field overwrote the stored password")
 	}
-}
-
-func TestAdminSMTPRejectsInvalidRecipients(t *testing.T) {
-	h := newHarness(t)
-	s, _ := adminSetup(t, h)
-
-	rec := s.post("/admin/settings/smtp", url.Values{
-		"host": {"smtp.example.com"}, "port": {"587"}, "security": {"none"},
-		"from_address":      {"no-reply@example.com"},
-		"notify_recipients": {"valid@example.com, broken@, also-broken"},
-	})
-	assertStatus(t, rec, http.StatusUnprocessableEntity)
-	assertContains(t, rec, "Невалидни адреси за известия")
 }
 
 func TestAdminTemplatePreviewEscapesSampleValues(t *testing.T) {
@@ -882,12 +873,12 @@ func TestAdminScheduleSave(t *testing.T) {
 	h := newHarness(t)
 	ctx := context.Background()
 	s, _ := adminSetup(t, h)
+	h.setTemplateRecipients("scheduled_export", "upravitel@example.com")
 
 	assertStatus(t, s.post("/admin/settings/schedule", url.Values{
 		"enabled":         {"1"},
 		"day_of_month":    {"31"},
 		"time_hhmm":       {"08:30"},
-		"recipients":      {"upravitel@example.com"},
 		"group_by_client": {"1"},
 	}), http.StatusSeeOther)
 
@@ -925,7 +916,6 @@ func TestAdminScheduleSave(t *testing.T) {
 		"enabled":      {"1"},
 		"day_of_month": {"31"},
 		"time_hhmm":    {"08:30"},
-		"recipients":   {"upravitel@example.com"},
 	}), http.StatusSeeOther)
 	sch, err = h.db.ExportSchedule(ctx)
 	if err != nil {
@@ -944,20 +934,19 @@ func TestAdminScheduleRejectsEnablingWithoutRecipients(t *testing.T) {
 		"enabled":      {"1"},
 		"day_of_month": {"1"},
 		"time_hhmm":    {"08:00"},
-		"recipients":   {""},
 	})
 	assertStatus(t, rec, http.StatusUnprocessableEntity)
-	assertContains(t, rec, "Добавете поне един получател")
+	assertContains(t, rec, "Задайте получатели в шаблона")
 }
 
 func TestAdminSendNowQueuesTheExport(t *testing.T) {
 	h := newHarness(t)
 	ctx := context.Background()
 	s, _ := adminSetup(t, h)
+	h.setTemplateRecipients("scheduled_export", "upravitel@example.com")
 
 	assertStatus(t, s.post("/admin/settings/schedule", url.Values{
 		"day_of_month": {"1"}, "time_hhmm": {"08:00"},
-		"recipients": {"upravitel@example.com"},
 	}), http.StatusSeeOther)
 
 	assertStatus(t, s.post("/admin/settings/schedule/send-now", url.Values{}), http.StatusSeeOther)
@@ -984,11 +973,11 @@ func TestAdminSendNowUsesTheSavedGroupByClientChoice(t *testing.T) {
 	h := newHarness(t)
 	ctx := context.Background()
 	s, _ := adminSetup(t, h)
+	h.setTemplateRecipients("scheduled_export", "upravitel@example.com")
 
 	assertStatus(t, s.post("/admin/settings/schedule", url.Values{
 		"day_of_month":    {"1"},
 		"time_hhmm":       {"08:00"},
-		"recipients":      {"upravitel@example.com"},
 		"group_by_client": {"1"},
 	}), http.StatusSeeOther)
 

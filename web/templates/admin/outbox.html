@@ -1,6 +1,9 @@
 {{define "content"}}
 <div class="page-head">
-  <h1>Изходящи имейли</h1>
+  <div>
+    <h1>Изходящи имейли</h1>
+    <p class="muted">Имейлите се пазят 3 месеца, след което се изтриват автоматично.</p>
+  </div>
 </div>
 
 <div class="card">
@@ -38,7 +41,7 @@
         <tr>
           <td class="numeric">{{.ID}}</td>
           <td class="small">{{.TemplateKey}}</td>
-          <td class="small">{{.Recipients}}</td>
+          <td class="small">{{.Recipients}}{{if .Cc}}<div class="hint">CC: {{.Cc}}</div>{{end}}</td>
           <td class="small">
             {{.Subject}}
             {{if .AttachmentName.Valid}}<br><span class="badge badge-pending">{{.AttachmentName.String}}</span>{{end}}

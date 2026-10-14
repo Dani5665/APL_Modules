@@ -110,6 +110,7 @@ func (w *Worker) processBatch(ctx context.Context) {
 func (w *Worker) deliver(ctx context.Context, sender *Sender, m store.OutboxMessage) {
 	msg := Message{
 		To:       m.RecipientList(),
+		Cc:       m.CcList(),
 		Subject:  m.Subject,
 		BodyHTML: m.BodyHTML,
 	}
@@ -123,7 +124,7 @@ func (w *Worker) deliver(ctx context.Context, sender *Sender, m store.OutboxMess
 			w.log.Error("outbox message could not be marked sent", "id", m.ID, "error", err)
 			return
 		}
-		w.log.Info("email sent", "id", m.ID, "template", m.TemplateKey, "recipients", m.Recipients)
+		w.log.Info("email sent", "id", m.ID, "template", m.TemplateKey, "recipients", m.Recipients, "cc", m.Cc)
 		return
 	}
 

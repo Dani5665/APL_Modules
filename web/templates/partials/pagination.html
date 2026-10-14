@@ -30,7 +30,7 @@
 {{define "request_badge"}}
 <span class="badge badge-{{.}}">
   {{if eq (printf "%s" .) "pending"}}Чакащо
-  {{else if eq (printf "%s" .) "approved"}}Одобрено
+  {{else if eq (printf "%s" .) "approved"}}Обработено
   {{else if eq (printf "%s" .) "denied"}}Отказано
   {{else}}{{.}}{{end}}
 </span>

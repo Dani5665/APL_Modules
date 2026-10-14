@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#1f5fa9">
-  <title>{{.Title}} — Модули: заявки</title>
+  <title>{{.Title}} — Управление каталог</title>
   <link rel="stylesheet" href="/static/app.css?v={{.AssetVersion}}">
   <link rel="icon" href="/static/favicon.svg?v={{.AssetVersion}}" type="image/svg+xml">
   <script src="/static/sidebar.js?v={{.AssetVersion}}"></script>
@@ -18,13 +18,21 @@
 
   <div class="app-shell">
     <aside id="sidebar" class="sidebar" aria-label="Меню">
-      <a class="brand" href="/">Модули<span>:</span> заявки</a>
+      <div class="brand">Управление <span>каталог</span></div>
       <nav class="side-nav" aria-label="Основна навигация">
-        <a href="/" {{if eq .ActivePage "home"}}aria-current="page"{{end}}>Клиенти</a>
-        <a href="/modules" {{if eq .ActivePage "modules"}}aria-current="page"{{end}}>Активни модули</a>
+        <div class="side-nav-group" role="group" aria-labelledby="nav-group-catalog">
+          <span class="side-nav-title" id="nav-group-catalog">NEXT - КАТАЛОГ</span>
+          <a href="/info" {{if eq .ActivePage "info"}}aria-current="page"{{end}}>Информация клиенти</a>
+        </div>
+        <div class="side-nav-group" role="group" aria-labelledby="nav-group-next">
+          <span class="side-nav-title" id="nav-group-next">NEXT - МОДУЛИ</span>
+          <a href="/" {{if eq .ActivePage "home"}}aria-current="page"{{end}}>Активация - модули</a>
+          <a href="/modules" {{if eq .ActivePage "modules"}}aria-current="page"{{end}}>Списък - активни</a>
+        </div>
       </nav>
       {{if .User}}
       <div class="sidebar-user">
+        {{if .User.Name}}<strong class="sidebar-name">{{.User.Name}}</strong>{{end}}
         <span class="sidebar-email">{{.User.Email}}</span>
         <form method="post" action="/logout">
           <input type="hidden" name="csrf_token" value="{{.CSRF}}">

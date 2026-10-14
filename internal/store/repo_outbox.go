@@ -12,9 +12,11 @@ import (
 // OutboxMessage is a queued email. Queueing rather than sending inline keeps
 // a failing SMTP server from failing a user's request.
 type OutboxMessage struct {
-	ID             int64
-	TemplateKey    string
-	Recipients     string
+	ID          int64
+	TemplateKey string
+	Recipients  string
+	// Cc are the addresses copied on the message, comma separated.
+	Cc             string
 	Subject        string
 	BodyHTML       string
 	AttachmentName sql.NullString
@@ -30,12 +32,15 @@ type OutboxMessage struct {
 // RecipientList splits the stored recipients into addresses.
 func (m OutboxMessage) RecipientList() []string { return SplitEmails(m.Recipients) }
 
-const outboxColumns = `id, template_key, recipients, subject, body_html, attachment_name,
+// CcList splits the stored CC addresses.
+func (m OutboxMessage) CcList() []string { return SplitEmails(m.Cc) }
+
+const outboxColumns = `id, template_key, recipients, cc, subject, body_html, attachment_name,
 	attachment_blob, status, attempts, last_error, next_attempt_at, sent_at, created_at`
 
 func scanOutbox(s interface{ Scan(...any) error }) (*OutboxMessage, error) {
 	var m OutboxMessage
-	err := s.Scan(&m.ID, &m.TemplateKey, &m.Recipients, &m.Subject, &m.BodyHTML,
+	err := s.Scan(&m.ID, &m.TemplateKey, &m.Recipients, &m.Cc, &m.Subject, &m.BodyHTML,
 		&m.AttachmentName, &m.AttachmentBlob, &m.Status, &m.Attempts, &m.LastError,
 		&m.NextAttemptAt, &m.SentAt, &m.CreatedAt)
 	if err != nil {
@@ -55,10 +60,10 @@ func (db *DB) QueueEmail(ctx context.Context, q Querier, m OutboxMessage) (int64
 	}
 	res, err := q.ExecContext(ctx,
 		`INSERT INTO email_outbox
-			(template_key, recipients, subject, body_html, attachment_name, attachment_blob,
+			(template_key, recipients, cc, subject, body_html, attachment_name, attachment_blob,
 			 status, attempts, next_attempt_at, created_at)
-		 VALUES (?, ?, ?, ?, ?, ?, 'pending', 0, ?, ?)`,
-		m.TemplateKey, strings.Join(SplitEmails(m.Recipients), ", "), m.Subject, m.BodyHTML,
+		 VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', 0, ?, ?)`,
+		m.TemplateKey, strings.Join(SplitEmails(m.Recipients), ", "), strings.Join(SplitEmails(m.Cc), ", "), m.Subject, m.BodyHTML,
 		m.AttachmentName, m.AttachmentBlob, m.NextAttemptAt, now)
 	if err != nil {
 		return 0, classify(err)
@@ -143,7 +148,7 @@ func (db *DB) ListOutbox(ctx context.Context, status string, limit, offset int) 
 	}
 
 	// The body and attachment are large and never shown in the listing.
-	query := `SELECT id, template_key, recipients, subject, '', attachment_name, NULL,
+	query := `SELECT id, template_key, recipients, cc, subject, '', attachment_name, NULL,
 		status, attempts, last_error, next_attempt_at, sent_at, created_at
 		FROM email_outbox` + where + ` ORDER BY id DESC LIMIT ? OFFSET ?`
 	args = append(args, limit, max(offset, 0))
@@ -177,4 +182,17 @@ func truncate(s string, n int) string {
 		return s
 	}
 	return s[:n]
+}
+
+// OutboxRetentionMonths is how long queued, sent and failed messages are kept.
+const OutboxRetentionMonths = 3
+
+// PurgeOutboxBefore deletes messages queued before the cutoff, whatever their
+// status, and returns how many were removed.
+func (db *DB) PurgeOutboxBefore(ctx context.Context, cutoff time.Time) (int64, error) {
+	res, err := db.ExecContext(ctx, `DELETE FROM email_outbox WHERE created_at < ?`, dates.FormatUTC(cutoff))
+	if err != nil {
+		return 0, classify(err)
+	}
+	return res.RowsAffected()
 }

@@ -50,8 +50,6 @@ type Settings struct {
 	Password    string
 	FromAddress string
 	FromName    string
-	// NotifyRecipients receive the "new request" email.
-	NotifyRecipients []string
 }
 
 // Configured reports whether enough is set to attempt a send.
@@ -71,13 +69,12 @@ func LoadSettings(ctx context.Context, db *store.DB, enc *auth.Encrypter) (Setti
 
 	port, _ := strconv.Atoi(raw[store.KeySMTPPort])
 	s := Settings{
-		Host:             raw[store.KeySMTPHost],
-		Port:             port,
-		Security:         Security(raw[store.KeySMTPSecurity]),
-		Username:         raw[store.KeySMTPUsername],
-		FromAddress:      raw[store.KeySMTPFromAddress],
-		FromName:         raw[store.KeySMTPFromName],
-		NotifyRecipients: store.SplitEmails(raw[store.KeyNotifyRecipients]),
+		Host:        raw[store.KeySMTPHost],
+		Port:        port,
+		Security:    Security(raw[store.KeySMTPSecurity]),
+		Username:    raw[store.KeySMTPUsername],
+		FromAddress: raw[store.KeySMTPFromAddress],
+		FromName:    raw[store.KeySMTPFromName],
 	}
 	if s.Security == "" {
 		s.Security = SecurityNone
@@ -96,6 +93,7 @@ func LoadSettings(ctx context.Context, db *store.DB, enc *auth.Encrypter) (Setti
 // Message is a ready-to-send email.
 type Message struct {
 	To         []string
+	Cc         []string
 	Subject    string
 	BodyHTML   string
 	BodyText   string
@@ -191,6 +189,11 @@ func (s *Sender) buildMsg(m Message) (*mail.Msg, error) {
 		return nil, fmt.Errorf("невалиден подател: %w", err)
 	}
 
+	if len(m.Cc) > 0 {
+		if err := msg.Cc(m.Cc...); err != nil {
+			return nil, fmt.Errorf("невалиден получател в копие: %w", err)
+		}
+	}
 	if err := msg.To(m.To...); err != nil {
 		return nil, fmt.Errorf("невалиден получател: %w", err)
 	}

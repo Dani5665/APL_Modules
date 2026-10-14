@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	"haynesproform/internal/audit"
 	"haynesproform/internal/auth"
@@ -64,6 +65,7 @@ type userFormView struct {
 	Errors   []string
 	IsNew    bool
 	Email    string
+	Name     string
 }
 
 func (a *App) handleAdminUserNew(w http.ResponseWriter, r *http.Request) {
@@ -88,6 +90,7 @@ func (a *App) handleAdminUserCreate(w http.ResponseWriter, r *http.Request) {
 	admin := adminFrom(c)
 
 	rawEmail := strings.TrimSpace(r.PostFormValue("email"))
+	name := strings.TrimSpace(r.PostFormValue("name"))
 	password := r.PostFormValue("password")
 	storeIDs := parseIDs(r.PostForm["stores"])
 
@@ -95,6 +98,9 @@ func (a *App) handleAdminUserCreate(w http.ResponseWriter, r *http.Request) {
 	email, err := auth.NormalizeEmail(rawEmail)
 	if err != nil {
 		errs = append(errs, "Потребителското име трябва да е валиден имейл адрес.")
+	}
+	if msg := validateUserName(name); msg != "" {
+		errs = append(errs, msg)
 	}
 	hash, herr := auth.HashPassword(password)
 	if herr != nil {
@@ -105,7 +111,7 @@ func (a *App) handleAdminUserCreate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if len(errs) == 0 {
-		_, err = a.DB.CreateUser(c, email, hash, storeIDs, false)
+		_, err = a.DB.CreateUser(c, email, name, hash, storeIDs, false)
 		if errors.Is(err, store.ErrConflict) {
 			errs = append(errs, "Вече съществува потребител с този имейл.")
 		} else if err != nil {
@@ -127,6 +133,7 @@ func (a *App) handleAdminUserCreate(w http.ResponseWriter, r *http.Request) {
 			Errors:   errs,
 			IsNew:    true,
 			Email:    rawEmail,
+			Name:     name,
 		}
 		if err := a.render.render(w, http.StatusUnprocessableEntity, LayoutAdmin, "admin/user_form", v); err != nil {
 			a.serverError(w, r, err)
@@ -173,6 +180,7 @@ func (a *App) handleAdminUserEdit(w http.ResponseWriter, r *http.Request) {
 		Stores:   stores,
 		Selected: selected,
 		Email:    u.Email,
+		Name:     u.Name,
 	}
 	if err := a.render.render(w, http.StatusOK, LayoutAdmin, "admin/user_form", v); err != nil {
 		a.serverError(w, r, err)
@@ -188,9 +196,18 @@ func (a *App) handleAdminUserUpdate(w http.ResponseWriter, r *http.Request) {
 		a.notFound(w, r)
 		return
 	}
+	name := strings.TrimSpace(r.PostFormValue("name"))
+	if validateUserName(name) != "" {
+		redirectWithError(w, r, "/admin/users/"+strconv.FormatInt(id, 10), "name_required")
+		return
+	}
 	storeIDs := parseIDs(r.PostForm["stores"])
 	if len(storeIDs) == 0 {
 		redirectWithError(w, r, "/admin/users/"+strconv.FormatInt(id, 10), "not_found")
+		return
+	}
+	if err := a.DB.SetUserName(c, id, name); err != nil {
+		a.serverError(w, r, err)
 		return
 	}
 	if err := a.DB.SetUserStores(c, id, storeIDs); err != nil {
@@ -199,7 +216,7 @@ func (a *App) handleAdminUserUpdate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	a.Audit.Record(c, audit.AdminActor(admin.ID, admin.Email), audit.UserUpdated,
-		strconv.FormatInt(id, 10), a.clientIP(r), map[string]any{"stores": storeIDs})
+		strconv.FormatInt(id, 10), a.clientIP(r), map[string]any{"stores": storeIDs, "name": name})
 	redirectWithFlash(w, r, "/admin/users", "user_updated")
 }
 
@@ -473,15 +490,19 @@ func (a *App) handleAdminStoreCreate(w http.ResponseWriter, r *http.Request) {
 	admin := adminFrom(c)
 
 	name := strings.TrimSpace(r.PostFormValue("name"))
-	external := strings.TrimSpace(r.PostFormValue("external_value"))
+	mandantID := strings.TrimSpace(r.PostFormValue("mandant_id"))
 	if name == "" {
-		a.renderStores(w, r, []string{"Въведете име на магазин."}, http.StatusUnprocessableEntity)
+		a.renderStores(w, r, []string{"Въведете MANDANT_NAME на магазина."}, http.StatusUnprocessableEntity)
+		return
+	}
+	if mandantID == "" {
+		a.renderStores(w, r, []string{"Въведете MANDANT_ID на магазина."}, http.StatusUnprocessableEntity)
 		return
 	}
 
-	id, err := a.DB.CreateStore(c, name, external)
+	id, err := a.DB.CreateStore(c, name, mandantID)
 	if errors.Is(err, store.ErrConflict) {
-		a.renderStores(w, r, []string{"Вече съществува магазин с това име."}, http.StatusUnprocessableEntity)
+		a.renderStores(w, r, []string{"Вече съществува магазин с това име или MANDANT_ID."}, http.StatusUnprocessableEntity)
 		return
 	}
 	if err != nil {
@@ -490,7 +511,7 @@ func (a *App) handleAdminStoreCreate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	a.Audit.Record(c, audit.AdminActor(admin.ID, admin.Email), audit.StoreCreated,
-		strconv.FormatInt(id, 10), a.clientIP(r), map[string]any{"name": name, "external_value": external})
+		strconv.FormatInt(id, 10), a.clientIP(r), map[string]any{"name": name, "mandant_id": mandantID})
 	redirectWithFlash(w, r, "/admin/stores", "store_created")
 }
 
@@ -504,15 +525,19 @@ func (a *App) handleAdminStoreUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	name := strings.TrimSpace(r.PostFormValue("name"))
-	external := strings.TrimSpace(r.PostFormValue("external_value"))
+	mandantID := strings.TrimSpace(r.PostFormValue("mandant_id"))
 	active := checkboxValue(r, "active")
 
 	if name == "" {
-		a.renderStores(w, r, []string{"Въведете име на магазин."}, http.StatusUnprocessableEntity)
+		a.renderStores(w, r, []string{"Въведете MANDANT_NAME на магазина."}, http.StatusUnprocessableEntity)
 		return
 	}
-	if err := a.DB.UpdateStore(c, id, name, external, active); errors.Is(err, store.ErrConflict) {
-		a.renderStores(w, r, []string{"Вече съществува магазин с това име."}, http.StatusUnprocessableEntity)
+	if mandantID == "" {
+		a.renderStores(w, r, []string{"Въведете MANDANT_ID на магазина."}, http.StatusUnprocessableEntity)
+		return
+	}
+	if err := a.DB.UpdateStore(c, id, name, mandantID, active); errors.Is(err, store.ErrConflict) {
+		a.renderStores(w, r, []string{"Вече съществува магазин с това име или MANDANT_ID."}, http.StatusUnprocessableEntity)
 		return
 	} else if err != nil {
 		a.serverError(w, r, err)
@@ -521,7 +546,7 @@ func (a *App) handleAdminStoreUpdate(w http.ResponseWriter, r *http.Request) {
 
 	a.Audit.Record(c, audit.AdminActor(admin.ID, admin.Email), audit.StoreUpdated,
 		strconv.FormatInt(id, 10), a.clientIP(r), map[string]any{
-			"name": name, "external_value": external, "active": active,
+			"name": name, "mandant_id": mandantID, "active": active,
 		})
 	redirectWithFlash(w, r, "/admin/stores", "store_updated")
 }
@@ -566,4 +591,19 @@ func idSet(ids []int64) map[int64]bool {
 		m[id] = true
 	}
 	return m
+}
+
+// maxUserNameLen bounds a salesperson's display name.
+const maxUserNameLen = 100
+
+// validateUserName returns a Bulgarian message when the name is not usable,
+// or "" when it is.
+func validateUserName(name string) string {
+	switch n := utf8.RuneCountInString(name); {
+	case n == 0:
+		return "Въведете име."
+	case n > maxUserNameLen:
+		return "Името е твърде дълго (най-много 100 знака)."
+	}
+	return ""
 }

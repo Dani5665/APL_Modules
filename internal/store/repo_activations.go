@@ -321,21 +321,21 @@ type ClientSummary struct {
 // Unicode-aware strings.ToLower instead. The full result set for the
 // account's stores is at most a few hundred clients even at the application's
 // stated scale, so filtering it in Go costs nothing that matters.
-func (db *DB) ListActiveClientsByStores(ctx context.Context, storeValues []string, search string, limit, offset int) ([]ClientSummary, int, error) {
-	if len(storeValues) == 0 {
+func (db *DB) ListActiveClientsByStores(ctx context.Context, storeNames []string, search string, limit, offset int) ([]ClientSummary, int, error) {
+	if len(storeNames) == 0 {
 		return nil, 0, nil
 	}
 
 	today := dates.Today()
-	args := make([]any, 0, len(storeValues)+2)
-	for _, s := range storeValues {
+	args := make([]any, 0, len(storeNames)+2)
+	for _, s := range storeNames {
 		args = append(args, s)
 	}
 	args = append(args, today, today)
 
 	query := `SELECT ` + activationColumns + `
 		FROM activations
-		WHERE client_store IN (` + placeholders(len(storeValues)) + `)
+		WHERE client_store IN (` + placeholders(len(storeNames)) + `)
 		  AND revoked_at IS NULL AND start_date <= ? AND end_date >= ?
 		ORDER BY client_name, client_code, username, module`
 

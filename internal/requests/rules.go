@@ -168,17 +168,17 @@ var (
 )
 
 // CheckStoreAccess is the authorization rule for opening a client: the
-// client's store must be one of the logged-in account's stores. The caller
-// has already fetched the client.
-func CheckStoreAccess(user *store.User, clientStore string) error {
+// client's MANDANT_ID must be the MANDANT_ID of one of the logged-in
+// account's stores. The caller has already fetched the client.
+func CheckStoreAccess(user *store.User, clientMandantID string) error {
 	if user == nil || !user.Active {
 		return fmt.Errorf("%w: account is not active", ErrNoAccess)
 	}
 	if len(user.Stores) == 0 {
 		return fmt.Errorf("%w: account has no stores assigned", ErrNoAccess)
 	}
-	if !user.HasStoreValue(clientStore) {
-		return fmt.Errorf("%w: client store %q is not one of the account's stores", ErrNoAccess, clientStore)
+	if !user.HasMandantID(clientMandantID) {
+		return fmt.Errorf("%w: client mandant id %q is not one of the account's stores", ErrNoAccess, clientMandantID)
 	}
 	return nil
 }

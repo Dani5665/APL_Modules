@@ -30,7 +30,7 @@ func totpCode(t *testing.T, secret string, at time.Time) string {
 // salesperson's email and a Sofia client.
 func sofiaSetup(t *testing.T, h *harness) (string, string) {
 	t.Helper()
-	sofia := h.seedStore("Магазин София", mock.StoreSofia)
+	sofia := h.seedStore(mock.StoreSofia, mock.MandantSofia)
 	const email = "prodavach@example.com"
 	h.seedUser(email, sofia)
 	return email, h.firstMockClient(mock.StoreSofia).Code
@@ -40,7 +40,7 @@ func TestLoginRequiredForCustomerPages(t *testing.T) {
 	h := newHarness(t)
 	s := h.newSession()
 
-	for _, path := range []string{"/", "/clients/search", "/clients/100000001", "/modules", "/modules/list"} {
+	for _, path := range []string{"/", "/clients/search", "/clients/100000001", "/modules", "/modules/list", "/info", "/info/search", "/info/100000001"} {
 		rec := s.get(path)
 		if rec.Code != http.StatusSeeOther {
 			t.Errorf("GET %s without a session: status %d, want 303", path, rec.Code)
@@ -312,8 +312,8 @@ func TestSubmitQueuesTheNotificationEmail(t *testing.T) {
 	h := newHarness(t)
 	email, code := sofiaSetup(t, h)
 
-	if err := h.db.SetSetting(context.Background(), store.KeyNotifyRecipients,
-		"admin@example.com, vtori@example.com"); err != nil {
+	if err := h.db.SetTemplateRecipients(context.Background(), "request_created",
+		"admin@example.com, vtori@example.com", dates.NowUTC()); err != nil {
 		t.Fatalf("set recipients: %v", err)
 	}
 

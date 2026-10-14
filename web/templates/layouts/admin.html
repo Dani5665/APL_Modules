@@ -19,22 +19,31 @@
     <aside id="sidebar" class="sidebar" aria-label="Меню">
       <a class="brand" href="/admin">Админ<span> панел</span></a>
       <nav class="side-nav" aria-label="Основна навигация">
-        <a href="/admin/requests" {{if eq .ActivePage "requests"}}aria-current="page"{{end}}>
-          Запитвания
-          {{if gt .PendingRequests 0}}<span class="nav-badge" aria-label="чакащи запитвания">{{.PendingRequests}}</span>{{end}}
-        </a>
-        <a href="/admin/activations" {{if eq .ActivePage "activations"}}aria-current="page"{{end}}>Активации</a>
-        <a href="/admin/users" {{if eq .ActivePage "users"}}aria-current="page"{{end}}>Потребители</a>
-        <a href="/admin/admins" {{if eq .ActivePage "admins"}}aria-current="page"{{end}}>Администратори</a>
-        <a href="/admin/stores" {{if eq .ActivePage "stores"}}aria-current="page"{{end}}>Магазини</a>
-        <a href="/admin/settings/smtp" {{if eq .ActivePage "smtp"}}aria-current="page"{{end}}>SMTP</a>
-        <a href="/admin/settings/templates" {{if eq .ActivePage "templates"}}aria-current="page"{{end}}>Шаблони</a>
-        <a href="/admin/settings/schedule" {{if eq .ActivePage "schedule"}}aria-current="page"{{end}}>График</a>
-        <a href="/admin/outbox" {{if eq .ActivePage "outbox"}}aria-current="page"{{end}}>
-          Имейли
-          {{if gt .FailedEmails 0}}<span class="nav-badge nav-badge-warn" aria-label="неуспешни имейли">{{.FailedEmails}}</span>{{end}}
-        </a>
-        <a href="/admin/audit" {{if eq .ActivePage "audit"}}aria-current="page"{{end}}>Одит</a>
+        <div class="side-nav-group" role="group" aria-labelledby="nav-group-modules">
+          <span class="side-nav-title" id="nav-group-modules">Модули - NEXT</span>
+          <a href="/admin/requests" {{if eq .ActivePage "requests"}}aria-current="page"{{end}}>
+            Запитвания
+            {{if gt .PendingRequests 0}}<span class="nav-badge" aria-label="чакащи запитвания">{{.PendingRequests}}</span>{{end}}
+          </a>
+          <a href="/admin/activations" {{if eq .ActivePage "activations"}}aria-current="page"{{end}}>Активации</a>
+        </div>
+        <div class="side-nav-group" role="group" aria-labelledby="nav-group-accounts">
+          <span class="side-nav-title" id="nav-group-accounts">Акаунти</span>
+          <a href="/admin/users" {{if eq .ActivePage "users"}}aria-current="page"{{end}}>Потребители</a>
+          <a href="/admin/admins" {{if eq .ActivePage "admins"}}aria-current="page"{{end}}>Администратори</a>
+        </div>
+        <div class="side-nav-group" role="group" aria-labelledby="nav-group-settings">
+          <span class="side-nav-title" id="nav-group-settings">Настройки</span>
+          <a href="/admin/stores" {{if eq .ActivePage "stores"}}aria-current="page"{{end}}>Магазини</a>
+          <a href="/admin/settings/smtp" {{if eq .ActivePage "smtp"}}aria-current="page"{{end}}>SMTP</a>
+          <a href="/admin/settings/templates" {{if eq .ActivePage "templates"}}aria-current="page"{{end}}>Шаблони</a>
+          <a href="/admin/settings/schedule" {{if eq .ActivePage "schedule"}}aria-current="page"{{end}}>График</a>
+          <a href="/admin/outbox" {{if eq .ActivePage "outbox"}}aria-current="page"{{end}}>
+            Имейли
+            {{if gt .FailedEmails 0}}<span class="nav-badge nav-badge-warn" aria-label="неуспешни имейли">{{.FailedEmails}}</span>{{end}}
+          </a>
+          <a href="/admin/audit" {{if eq .ActivePage "audit"}}aria-current="page"{{end}}>Одит</a>
+        </div>
       </nav>
       {{if .Admin}}
       <div class="sidebar-user">

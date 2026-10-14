@@ -1,0 +1,71 @@
+{{define "content"}}
+<div class="page-head">
+  <div>
+    <h1>Информация клиенти</h1>
+  </div>
+</div>
+
+<div class="alert alert-info" role="note">
+  Тук можете да намерите информация за всички клиенти и да пуснете заявка за създаване на профил в NEXT
+</div>
+
+<div class="card">
+  <div class="field">
+    <label for="info-search">Търсене по клиентски номер, име или обслужващ обект</label>
+    <input type="search" id="info-search" name="q" value="{{.Search}}"
+           autocomplete="off" autofocus
+           hx-get="/info/search"
+           hx-trigger="input changed delay:300ms, search"
+           hx-target="#info-results"
+           hx-select="#info-results"
+           hx-swap="outerHTML"
+           hx-indicator="#info-search-indicator">
+    <span id="info-search-indicator" class="htmx-indicator hint">Търсене…</span>
+  </div>
+
+  {{/* Loaded as soon as the page is up, so the page never waits for the
+       external database. */}}
+  <div id="info-results" hx-get="{{.LoadURL}}" hx-trigger="load" hx-swap="outerHTML">
+    <p class="empty">Зареждане на клиентите…</p>
+  </div>
+</div>
+{{end}}
+
+{{define "info_results"}}
+<div id="info-results">
+  {{if .Unavailable}}
+  <div class="alert alert-error" role="alert">
+    Списъкът с клиенти не може да бъде зареден в момента. Опитайте отново по-късно.
+  </div>
+  {{else if .Customers}}
+  <p class="hint">Общо клиенти: {{.Page.Total}}</p>
+  <ul class="client-cards">
+    {{template "info_more" .}}
+  </ul>
+  {{else}}
+  <p class="empty">Няма намерени клиенти.</p>
+  {{end}}
+</div>
+{{end}}
+
+{{/* One batch of rows. While more remain, the last item loads the next batch
+     as soon as it scrolls into view, replacing itself with those rows. */}}
+{{define "info_more"}}
+{{range .Customers}}
+<li>
+  <a class="client-card" href="/info/{{.Code}}">
+    <span class="client-card-name">{{.Name}}</span>
+    <span class="client-card-meta">
+      <span class="mono">{{.Code}}</span>
+      <span>{{dash .Mandant}}</span>
+    </span>
+  </a>
+</li>
+{{end}}
+{{if .Page.HasNext}}
+<li class="scroll-more" hx-get="/info/search{{queryString .Page.Query "page" .Page.Next}}"
+    hx-trigger="revealed" hx-swap="outerHTML">
+  Зареждане…
+</li>
+{{end}}
+{{end}}

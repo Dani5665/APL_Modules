@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -271,4 +272,95 @@ func TestRequestWithoutAnEndDate(t *testing.T) {
 
 	rec = s.get("/clients/" + code)
 	assertContains(t, rec, "Без крайна дата")
+}
+
+func TestActivationPageWarnsAboutOtherStores(t *testing.T) {
+	h := newHarness(t)
+	email, _ := sofiaSetup(t, h)
+	s := h.loginUser(email)
+
+	rec := s.get("/")
+	assertStatus(t, rec, http.StatusOK)
+	assertContains(t, rec, "Виждате клиентите на следните обекти:",
+		"Ако не намирате клиента, който търсите може да е, защото има различен обслужващ обект от тези които вие виждате")
+}
+
+func TestSidebarShowsTheUsersNameAboveTheEmail(t *testing.T) {
+	h := newHarness(t)
+	email, _ := sofiaSetup(t, h)
+	s := h.loginUser(email)
+
+	rec := s.get("/")
+	assertStatus(t, rec, http.StatusOK)
+	body := rec.Body.String()
+	n, e := strings.Index(body, "Тестов Потребител"), strings.Index(body, email)
+	if n < 0 || e < 0 || n > e {
+		t.Errorf("name at %d, email at %d; want the name shown, above the email", n, e)
+	}
+}
+
+func TestAdminRequestStatusIsCalledProcessed(t *testing.T) {
+	h := newHarness(t)
+	s, id := adminSetup(t, h)
+
+	assertStatus(t, s.post("/admin/requests/"+strconv.FormatInt(id, 10)+"/approve", url.Values{}), http.StatusSeeOther)
+
+	rec := s.get("/admin/requests")
+	assertStatus(t, rec, http.StatusOK)
+	// The list's badge and the status filter both say "Обработено".
+	assertContains(t, rec, "Обработено")
+	assertNotContains(t, rec, "Одобрено")
+}
+
+func TestAuditPageStatesTheRetention(t *testing.T) {
+	h := newHarness(t)
+	s, _ := adminSetup(t, h)
+	assertContains(t, s.get("/admin/audit"), "Записите се пазят 3 месеца")
+}
+
+func TestOutboxPageStatesTheRetention(t *testing.T) {
+	h := newHarness(t)
+	s, _ := adminSetup(t, h)
+	assertContains(t, s.get("/admin/outbox"), "Имейлите се пазят 3 месеца")
+}
+
+// The schedule time is picked with 24-hour selects, not a browser time field.
+func TestScheduleTimeUsesTwentyFourHourSelects(t *testing.T) {
+	h := newHarness(t)
+	ctx := context.Background()
+	s, _ := adminSetup(t, h)
+	h.setTemplateRecipients("scheduled_export", "upravitel@example.com")
+
+	rec := s.get("/admin/settings/schedule")
+	assertStatus(t, rec, http.StatusOK)
+	assertContains(t, rec, `<select id="hour" name="hour"`, `<select id="minute" name="minute"`,
+		`<option value="23"`, `<option value="00"`)
+	assertNotContains(t, rec, `type="time"`)
+
+	assertStatus(t, s.post("/admin/settings/schedule", url.Values{
+		"enabled": {"1"}, "day_of_month": {"5"}, "hour": {"20"}, "minute": {"45"},
+	}), http.StatusSeeOther)
+	sch, err := h.db.ExportSchedule(ctx)
+	if err != nil || sch.TimeHHMM != "20:45" {
+		t.Fatalf("saved time = %q, %v; want 20:45", sch.TimeHHMM, err)
+	}
+
+	// The saved time comes back selected.
+	rec = s.get("/admin/settings/schedule")
+	assertContains(t, rec, `<option value="20" selected>`, `<option value="45" selected>`)
+
+	// Early morning keeps its leading zero.
+	assertStatus(t, s.post("/admin/settings/schedule", url.Values{
+		"enabled": {"1"}, "day_of_month": {"5"}, "hour": {"07"}, "minute": {"05"},
+	}), http.StatusSeeOther)
+	if sch, _ = h.db.ExportSchedule(ctx); sch.TimeHHMM != "07:05" {
+		t.Errorf("saved time = %q, want 07:05", sch.TimeHHMM)
+	}
+
+	// An impossible time is refused.
+	rec = s.post("/admin/settings/schedule", url.Values{
+		"enabled": {"1"}, "day_of_month": {"5"}, "hour": {"24"}, "minute": {"00"},
+	})
+	assertStatus(t, rec, http.StatusUnprocessableEntity)
+	assertContains(t, rec, "ЧЧ:ММ")
 }

@@ -40,6 +40,7 @@
     <table>
       <thead>
         <tr>
+          <th scope="col">Име</th>
           <th scope="col">Имейл</th>
           <th scope="col">Магазини</th>
           <th scope="col">Състояние</th>
@@ -50,6 +51,7 @@
       <tbody>
         {{range .Users}}
         <tr>
+          <td>{{if .Name}}{{.Name}}{{else}}<span class="muted">—</span>{{end}}</td>
           <td>{{.Email}}</td>
           <td class="small">
             {{range $i, $s := .Stores}}{{if $i}}, {{end}}{{$s.Name}}{{else}}<span class="muted">—</span>{{end}}

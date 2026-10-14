@@ -126,9 +126,9 @@ func newHarnessWithConfig(t *testing.T, mutate func(*config.Config)) *harness {
 }
 
 // seedStore creates a store and returns its id.
-func (h *harness) seedStore(name, external string) int64 {
+func (h *harness) seedStore(name, mandantID string) int64 {
 	h.t.Helper()
-	id, err := h.db.CreateStore(context.Background(), name, external)
+	id, err := h.db.CreateStore(context.Background(), name, mandantID)
 	if err != nil {
 		h.t.Fatalf("create store %s: %v", name, err)
 	}
@@ -147,7 +147,7 @@ func (h *harness) seedUserWith(email string, mustChangePassword bool, storeIDs .
 	if err != nil {
 		h.t.Fatalf("hash password: %v", err)
 	}
-	if _, err := h.db.CreateUser(context.Background(), email, hash, storeIDs, mustChangePassword); err != nil {
+	if _, err := h.db.CreateUser(context.Background(), email, "Тестов Потребител", hash, storeIDs, mustChangePassword); err != nil {
 		h.t.Fatalf("create user %s: %v", email, err)
 	}
 	u, err := h.db.UserByEmail(context.Background(), email)
@@ -387,7 +387,7 @@ func truncateBody(s string) string {
 // firstMockClient returns a seeded client of the given external store.
 func (h *harness) firstMockClient(storeValue string) external.Client {
 	h.t.Helper()
-	clients, err := h.dir.ListClientsByStores(context.Background(), []string{storeValue})
+	clients, err := h.dir.ListClientsByStores(context.Background(), []string{mock.MandantID(storeValue)})
 	if err != nil || len(clients) == 0 {
 		h.t.Fatalf("no mock clients for store %s: %v", storeValue, err)
 	}
@@ -422,4 +422,12 @@ func (h *harness) clientLogins(clientCode string) []string {
 		h.t.Fatalf("list client logins: %v", err)
 	}
 	return logins
+}
+
+// setTemplateRecipients assigns the addresses an email template is sent to.
+func (h *harness) setTemplateRecipients(key, recipients string) {
+	h.t.Helper()
+	if err := h.db.SetTemplateRecipients(context.Background(), key, recipients, dates.NowUTC()); err != nil {
+		h.t.Fatalf("set recipients of %s: %v", key, err)
+	}
 }

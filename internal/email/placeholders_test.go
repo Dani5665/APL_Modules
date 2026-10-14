@@ -99,8 +99,8 @@ func TestPlainText(t *testing.T) {
 }
 
 func TestDefaultTemplatesUseOnlyKnownPlaceholders(t *testing.T) {
-	if len(Defaults) != 4 {
-		t.Fatalf("got %d default templates, want 4", len(Defaults))
+	if len(Defaults) != 5 {
+		t.Fatalf("got %d default templates, want 5", len(Defaults))
 	}
 	for _, d := range Defaults {
 		if unknown := UnknownPlaceholders(d.Key, d.DefaultSubject, d.DefaultBodyHTML); len(unknown) > 0 {

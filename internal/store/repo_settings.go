@@ -80,14 +80,19 @@ type EmailTemplate struct {
 	Subject   string
 	BodyHTML  string
 	UpdatedAt string
+	// Recipients are the addresses this template is sent to, comma separated.
+	// Empty for templates that go back to a request's submitter.
+	Recipients string
+	// CCSubmitter is true when the user who filed the request is always copied.
+	CCSubmitter bool
 }
 
 // EmailTemplateByKey loads one template.
 func (db *DB) EmailTemplateByKey(ctx context.Context, key string) (*EmailTemplate, error) {
 	var t EmailTemplate
 	err := db.QueryRowContext(ctx,
-		`SELECT key, subject, body_html, updated_at FROM email_templates WHERE key = ?`, key).
-		Scan(&t.Key, &t.Subject, &t.BodyHTML, &t.UpdatedAt)
+		`SELECT key, subject, body_html, updated_at, recipients, cc_submitter FROM email_templates WHERE key = ?`, key).
+		Scan(&t.Key, &t.Subject, &t.BodyHTML, &t.UpdatedAt, &t.Recipients, &t.CCSubmitter)
 	if err != nil {
 		return nil, classify(err)
 	}
@@ -97,7 +102,7 @@ func (db *DB) EmailTemplateByKey(ctx context.Context, key string) (*EmailTemplat
 // ListEmailTemplates returns every template.
 func (db *DB) ListEmailTemplates(ctx context.Context) ([]EmailTemplate, error) {
 	rows, err := db.QueryContext(ctx,
-		`SELECT key, subject, body_html, updated_at FROM email_templates ORDER BY key`)
+		`SELECT key, subject, body_html, updated_at, recipients, cc_submitter FROM email_templates ORDER BY key`)
 	if err != nil {
 		return nil, classify(err)
 	}
@@ -106,7 +111,7 @@ func (db *DB) ListEmailTemplates(ctx context.Context) ([]EmailTemplate, error) {
 	var out []EmailTemplate
 	for rows.Next() {
 		var t EmailTemplate
-		if err := rows.Scan(&t.Key, &t.Subject, &t.BodyHTML, &t.UpdatedAt); err != nil {
+		if err := rows.Scan(&t.Key, &t.Subject, &t.BodyHTML, &t.UpdatedAt, &t.Recipients, &t.CCSubmitter); err != nil {
 			return nil, classify(err)
 		}
 		out = append(out, t)
@@ -126,12 +131,33 @@ func (db *DB) SaveEmailTemplate(ctx context.Context, key, subject, bodyHTML, now
 	return classify(err)
 }
 
-// EnsureEmailTemplate seeds a template only if it does not exist yet, so an
-// admin's edits are never overwritten at startup.
-func (db *DB) EnsureEmailTemplate(ctx context.Context, key, subject, bodyHTML, now string) error {
+// RecipientList splits the stored recipients into addresses.
+func (t EmailTemplate) RecipientList() []string { return SplitEmails(t.Recipients) }
+
+// TemplateRecipients returns the addresses a template is sent to.
+func (db *DB) TemplateRecipients(ctx context.Context, key string) ([]string, error) {
+	t, err := db.EmailTemplateByKey(ctx, key)
+	if err != nil {
+		return nil, err
+	}
+	return t.RecipientList(), nil
+}
+
+// SetTemplateRecipients replaces the addresses a template is sent to.
+func (db *DB) SetTemplateRecipients(ctx context.Context, key, recipients, now string) error {
 	_, err := db.ExecContext(ctx,
-		`INSERT INTO email_templates (key, subject, body_html, updated_at) VALUES (?, ?, ?, ?)
-		 ON CONFLICT(key) DO NOTHING`, key, subject, bodyHTML, now)
+		`UPDATE email_templates SET recipients = ?, updated_at = ? WHERE key = ?`,
+		recipients, now, key)
+	return classify(err)
+}
+
+// EnsureEmailTemplate seeds a template only if it does not exist yet, so an
+// admin's edits are never overwritten at startup. recipients is only used for
+// a template that is created here.
+func (db *DB) EnsureEmailTemplate(ctx context.Context, key, subject, bodyHTML, recipients, now string) error {
+	_, err := db.ExecContext(ctx,
+		`INSERT INTO email_templates (key, subject, body_html, recipients, updated_at) VALUES (?, ?, ?, ?, ?)
+		 ON CONFLICT(key) DO NOTHING`, key, subject, bodyHTML, recipients, now)
 	return classify(err)
 }
 
@@ -184,12 +210,12 @@ func (db *DB) ExportSchedule(ctx context.Context) (*ExportSchedule, error) {
 
 // SaveExportSchedule stores the admin-editable part of the schedule and the
 // recomputed next run time.
-func (db *DB) SaveExportSchedule(ctx context.Context, enabled bool, day int, hhmm, recipients string, groupByClient bool, nextRunAt sql.NullString) error {
+func (db *DB) SaveExportSchedule(ctx context.Context, enabled bool, day int, hhmm string, groupByClient bool, nextRunAt sql.NullString) error {
 	_, err := db.ExecContext(ctx,
 		`UPDATE export_schedule
-		 SET enabled = ?, day_of_month = ?, time_hhmm = ?, recipients = ?, group_by_client = ?, next_run_at = ?
+		 SET enabled = ?, day_of_month = ?, time_hhmm = ?, group_by_client = ?, next_run_at = ?
 		 WHERE id = 1`,
-		enabled, day, hhmm, recipients, groupByClient, nextRunAt)
+		enabled, day, hhmm, groupByClient, nextRunAt)
 	return classify(err)
 }
 
@@ -211,5 +237,13 @@ func (db *DB) ClaimExportRun(ctx context.Context, expectedNextRun, newNextRun st
 func (db *DB) RecordExportRun(ctx context.Context, at, result string) error {
 	_, err := db.ExecContext(ctx,
 		`UPDATE export_schedule SET last_run_at = ?, last_result = ? WHERE id = 1`, at, result)
+	return classify(err)
+}
+
+// SetTemplateCCSubmitter turns the "always copy the submitter" option of a
+// template on or off.
+func (db *DB) SetTemplateCCSubmitter(ctx context.Context, key string, on bool, now string) error {
+	_, err := db.ExecContext(ctx,
+		`UPDATE email_templates SET cc_submitter = ?, updated_at = ? WHERE key = ?`, on, now, key)
 	return classify(err)
 }

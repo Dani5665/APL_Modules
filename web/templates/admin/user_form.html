@@ -17,6 +17,11 @@
     </div>
 
     <div class="field">
+      <label for="name">Име</label>
+      <input type="text" id="name" name="name" value="{{.Name}}" maxlength="100" required>
+    </div>
+
+    <div class="field">
       <label for="password">Парола</label>
       <input type="password" id="password" name="password" minlength="10"
              autocomplete="new-password" required>
@@ -31,7 +36,7 @@
         <div class="check">
           <input type="checkbox" id="store-{{.ID}}" name="stores" value="{{.ID}}"
                  {{if index $.Selected .ID}}checked{{end}}>
-          <label for="store-{{.ID}}">{{.Name}} <span class="muted small">({{.ExternalValue}})</span></label>
+          <label for="store-{{.ID}}">{{.Name}} <span class="muted small">(MANDANT_ID: {{.MandantID}})</span></label>
         </div>
         {{end}}
       {{else}}
@@ -49,15 +54,21 @@
 {{else}}
 
 <div class="card">
-  <h2 class="card-title">Магазини</h2>
+  <h2 class="card-title">Име и магазини</h2>
   <form method="post" action="/admin/users/{{.Target.ID}}">
     <input type="hidden" name="csrf_token" value="{{.CSRF}}">
+
+    <div class="field">
+      <label for="name">Име</label>
+      <input type="text" id="name" name="name" value="{{.Name}}" maxlength="100" required>
+    </div>
+
     {{range .Stores}}
     <div class="check {{if not .Active}}disabled{{end}}">
       <input type="checkbox" id="store-{{.ID}}" name="stores" value="{{.ID}}"
              {{if index $.Selected .ID}}checked{{end}}>
       <label for="store-{{.ID}}">
-        {{.Name}} <span class="muted small">({{.ExternalValue}})</span>
+        {{.Name}} <span class="muted small">(MANDANT_ID: {{.MandantID}})</span>
         {{if not .Active}}<span class="badge badge-expired">неактивен</span>{{end}}
       </label>
     </div>

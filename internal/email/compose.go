@@ -92,7 +92,7 @@ func RenderTemplate(subject, bodyHTML string, values map[string]string) *Rendere
 //
 // Queueing rather than sending inline is what keeps a broken SMTP server from
 // failing a salesperson's submission.
-func (c *Composer) Queue(ctx context.Context, q store.Querier, templateKey string, recipients []string, values map[string]string, att *Attachment) (int64, error) {
+func (c *Composer) Queue(ctx context.Context, q store.Querier, templateKey string, recipients, cc []string, values map[string]string, att *Attachment) (int64, error) {
 	if len(recipients) == 0 {
 		return 0, fmt.Errorf("шаблон %q: няма получатели", templateKey)
 	}
@@ -104,6 +104,7 @@ func (c *Composer) Queue(ctx context.Context, q store.Querier, templateKey strin
 	m := store.OutboxMessage{
 		TemplateKey: templateKey,
 		Recipients:  strings.Join(recipients, ", "),
+		Cc:          strings.Join(cc, ", "),
 		Subject:     r.Subject,
 		BodyHTML:    r.BodyHTML,
 	}
@@ -112,4 +113,23 @@ func (c *Composer) Queue(ctx context.Context, q store.Querier, templateKey strin
 		m.AttachmentBlob = att.Content
 	}
 	return c.db.QueueEmail(ctx, q, m)
+}
+
+// ProfileRequestValues builds the placeholder values for a profile request.
+// The password is the plain value the submitter chose: the administrator
+// needs it to create the profile.
+func (c *Composer) ProfileRequestValues(n store.NewProfileRequest, password string) map[string]string {
+	return map[string]string{
+		PHClientCode:       n.ClientCode,
+		PHClientName:       n.ClientName,
+		PHProfileStore:     n.StoreName,
+		PHProfileUsername:  n.Username,
+		PHProfilePassword:  password,
+		PHProfileTransport: n.Transport,
+		PHSubmitterName:    n.SubmitterName,
+		PHSubmitterEmail:   n.SubmitterEmail,
+		PHSubmitterStores:  n.SubmitterStores,
+		PHComment:          n.Comment,
+		PHRequestDate:      dates.DisplayTimestamp(dates.NowUTC()),
+	}
 }

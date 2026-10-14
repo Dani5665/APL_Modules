@@ -16,6 +16,7 @@
         <tr>
           <th scope="col">Шаблон</th>
           <th scope="col">Тема</th>
+          <th scope="col">Получатели</th>
           <th scope="col">Състояние</th>
           <th scope="col">Променен</th>
           <th scope="col"></th>
@@ -29,6 +30,11 @@
             <div class="hint">{{.Def.Description}}</div>
           </td>
           <td class="small">{{if .Stored}}{{.Stored.Subject}}{{else}}{{.Def.DefaultSubject}}{{end}}</td>
+          <td class="small">
+            {{if .Def.AssignRecipients}}{{if and .Stored .Stored.Recipients}}{{.Stored.Recipients}}{{else}}<span class="badge badge-revoked">няма</span>{{end}}
+            {{if and .Def.AllowCCSubmitter .Stored .Stored.CCSubmitter}}<div class="hint">CC до подателя</div>{{end}}
+            {{else}}<span class="muted">Към подателя</span>{{end}}
+          </td>
           <td>
             {{if .IsCustom}}<span class="badge badge-pending">променен</span>
             {{else}}<span class="badge badge-expired">по подразбиране</span>{{end}}

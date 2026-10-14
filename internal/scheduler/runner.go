@@ -121,7 +121,12 @@ func (r *Runner) tick(ctx context.Context) {
 		"due_at", next.In(dates.Sofia).Format(time.RFC3339),
 		"next_at", following.Format(time.RFC3339))
 
-	if err := r.runExport(ctx, s.RecipientList(), export.Options{GroupByClient: s.GroupByClient},
+	recipients, err := r.db.TemplateRecipients(ctx, email.TemplateScheduledExport)
+	if err != nil {
+		r.log.Error("export recipients could not be read", "error", err)
+		return
+	}
+	if err := r.runExport(ctx, recipients, export.Options{GroupByClient: s.GroupByClient},
 		audit.ExportScheduled, audit.Actor{Type: "system", Label: "scheduler"}, ""); err != nil {
 		r.recordResult(ctx, "Грешка: "+err.Error())
 		r.log.Error("scheduled export failed", "error", err)
@@ -137,7 +142,10 @@ func (r *Runner) SendNow(ctx context.Context, actor audit.Actor, ip string) erro
 	if err != nil {
 		return err
 	}
-	recipients := s.RecipientList()
+	recipients, err := r.db.TemplateRecipients(ctx, email.TemplateScheduledExport)
+	if err != nil {
+		return err
+	}
 	if len(recipients) == 0 {
 		return fmt.Errorf("няма зададени получатели на справката")
 	}
@@ -164,7 +172,7 @@ func (r *Runner) runExport(ctx context.Context, recipients []string, opts export
 
 	today := dates.Today()
 	values := r.composer.ExportValues(today, res.RowCount)
-	id, err := r.composer.Queue(ctx, nil, email.TemplateScheduledExport, recipients, values,
+	id, err := r.composer.Queue(ctx, nil, email.TemplateScheduledExport, recipients, nil, values,
 		&email.Attachment{Filename: res.Filename, Content: res.Content})
 	if err != nil {
 		return fmt.Errorf("справката не може да бъде поставена в опашката: %w", err)
@@ -201,7 +209,7 @@ func (r *Runner) Reschedule(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	return r.db.SaveExportSchedule(ctx, s.Enabled, s.DayOfMonth, s.TimeHHMM, s.Recipients, s.GroupByClient, next)
+	return r.db.SaveExportSchedule(ctx, s.Enabled, s.DayOfMonth, s.TimeHHMM, s.GroupByClient, next)
 }
 
 // ComputeNext returns the next run timestamp for a schedule, or SQL NULL when

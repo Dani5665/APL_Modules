@@ -22,27 +22,29 @@ import (
 // printed at startup and is only ever used with the mock directory.
 const DemoPassword = "demo-parola-2026"
 
-// storeSeed pairs a display name with the value the mock directory uses.
+// storeSeed pairs a store name (MANDANT_NAME) with its MANDANT_ID, as the mock
+// directory has them.
 type storeSeed struct {
-	name     string
-	external string
+	name      string
+	mandantID string
 }
 
 var storeSeeds = []storeSeed{
-	{"Магазин София", mock.StoreSofia},
-	{"Магазин Варна", mock.StoreVarna},
-	{"Магазин Пловдив", mock.StorePlovdiv},
+	{mock.StoreSofia, mock.MandantSofia},
+	{mock.StoreVarna, mock.MandantVarna},
+	{mock.StorePlovdiv, mock.MandantPlovdiv},
 }
 
 // userSeed is a salesperson and the stores they cover.
 type userSeed struct {
 	email  string
+	name   string
 	stores []string
 }
 
 var userSeeds = []userSeed{
-	{"ivan.petrov@example.com", []string{mock.StoreSofia}},
-	{"maria.dimitrova@example.com", []string{mock.StoreVarna, mock.StorePlovdiv}},
+	{"ivan.petrov@example.com", "Иван Петров", []string{mock.StoreSofia}},
+	{"maria.dimitrova@example.com", "Мария Димитрова", []string{mock.StoreVarna, mock.StorePlovdiv}},
 }
 
 // Seed populates stores, salespeople, activations and requests if the
@@ -76,15 +78,15 @@ func Seed(ctx context.Context, db *store.DB, log *slog.Logger) (bool, error) {
 	return true, nil
 }
 
-// seedStores creates the three stores and returns their ids by external value.
+// seedStores creates the three stores and returns their ids by name.
 func seedStores(ctx context.Context, db *store.DB) (map[string]int64, error) {
 	ids := make(map[string]int64, len(storeSeeds))
 	for _, s := range storeSeeds {
-		id, err := db.CreateStore(ctx, s.name, s.external)
+		id, err := db.CreateStore(ctx, s.name, s.mandantID)
 		if err != nil {
 			return nil, fmt.Errorf("seed store %s: %w", s.name, err)
 		}
-		ids[s.external] = id
+		ids[s.name] = id
 	}
 	return ids, nil
 }
@@ -101,7 +103,7 @@ func seedUsers(ctx context.Context, db *store.DB, storeIDs map[string]int64) err
 		}
 		// The demo accounts skip the forced password change so the flow can be
 		// walked through without an extra step.
-		if _, err := db.CreateUser(ctx, u.email, hash, ids, false); err != nil {
+		if _, err := db.CreateUser(ctx, u.email, u.name, hash, ids, false); err != nil {
 			return fmt.Errorf("seed user %s: %w", u.email, err)
 		}
 	}
@@ -315,7 +317,7 @@ func markDecided(ctx context.Context, db *store.DB, id int64, status store.Reque
 // storeNameFor maps an external store value to the local display name.
 func storeNameFor(external string) string {
 	for _, s := range storeSeeds {
-		if s.external == external {
+		if s.name == external {
 			return s.name
 		}
 	}

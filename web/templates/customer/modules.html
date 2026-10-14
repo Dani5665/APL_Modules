@@ -3,7 +3,7 @@
   <div>
     <h1>Активни модули</h1>
     <p class="muted">
-      Клиенти на {{range $i, $s := .User.Stores}}{{if $i}}, {{end}}{{$s.Name}}{{else}}— няма зададени магазини{{end}}
+      Виждате клиентите на следните обекти: {{range $i, $s := .User.Stores}}{{if $i}}, {{end}}{{$s.Name}}{{else}}няма зададени обекти{{end}}
     </p>
   </div>
 </div>

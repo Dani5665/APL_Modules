@@ -6,9 +6,9 @@
 {{template "errors" .Errors}}
 
 <div class="alert alert-info" role="status">
-  <strong>Външна стойност</strong> е стойността на магазина така, както се среща
-  във външната база данни. Съответствието се поддържа ръчно — няма автоматична
-  синхронизация.
+  <strong>MANDANT_ID</strong> е идентификаторът на магазина във външната база
+  данни - по него се търсят клиентите и транспортът. <strong>MANDANT_NAME</strong>
+  е името на магазина и трябва да съвпада с това във външната база.
 </div>
 
 <div class="card">
@@ -18,8 +18,8 @@
     <table>
       <thead>
         <tr>
-          <th scope="col">Име</th>
-          <th scope="col">Външна стойност</th>
+          <th scope="col">MANDANT_NAME</th>
+          <th scope="col">MANDANT_ID</th>
           <th scope="col">Активен</th>
           <th scope="col" class="numeric">Потребители</th>
           <th scope="col">Действия</th>
@@ -29,13 +29,13 @@
         {{range .Stores}}
         <tr>
           <td>
-            <label class="sr-only" for="name-{{.ID}}">Име на магазин</label>
+            <label class="sr-only" for="name-{{.ID}}">MANDANT_NAME</label>
             <input type="text" id="name-{{.ID}}" name="name" value="{{.Name}}"
                    form="store-{{.ID}}" required>
           </td>
           <td>
-            <label class="sr-only" for="ext-{{.ID}}">Външна стойност</label>
-            <input type="text" id="ext-{{.ID}}" name="external_value" value="{{.ExternalValue}}"
+            <label class="sr-only" for="ext-{{.ID}}">MANDANT_ID</label>
+            <input type="text" id="ext-{{.ID}}" name="mandant_id" value="{{.MandantID}}" required
                    form="store-{{.ID}}">
           </td>
           <td>
@@ -82,13 +82,12 @@
     <input type="hidden" name="csrf_token" value="{{.CSRF}}">
     <div class="form-row">
       <div class="field">
-        <label for="new_name">Име</label>
-        <input type="text" id="new_name" name="name" placeholder="Магазин София" required>
+        <label for="new_name">MANDANT_NAME</label>
+        <input type="text" id="new_name" name="name" required>
       </div>
       <div class="field">
-        <label for="new_external">Външна стойност</label>
-        <input type="text" id="new_external" name="external_value" placeholder="SOFIA">
-        <p class="hint">Ако е празно, се използва името.</p>
+        <label for="new_mandant">MANDANT_ID</label>
+        <input type="text" id="new_mandant" name="mandant_id" required>
       </div>
     </div>
     <div class="form-actions">

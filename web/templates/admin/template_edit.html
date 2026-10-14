@@ -59,6 +59,30 @@
       </p>
     </div>
 
+    {{if .Def.AssignRecipients}}
+    <div class="field">
+      <label for="recipients">Получатели</label>
+      <textarea id="recipients" name="recipients" rows="4">{{.RecipientsRaw}}</textarea>
+      <p class="hint">
+        Адресите, до които се изпраща този имейл. Един адрес на ред (или разделени със запетая).
+        Без получатели имейлът не се изпраща.
+      </p>
+    </div>
+    {{if .Def.AllowCCSubmitter}}
+    <div class="check">
+      <input type="checkbox" id="cc_submitter" name="cc_submitter" value="1" {{if .Template.CCSubmitter}}checked{{end}}>
+      <label for="cc_submitter">Изпращай CC до подателя</label>
+    </div>
+    <p class="hint">
+      Когато е отметнато, потребителят, който е подал запитването, винаги получава копие (CC) на имейла.
+    </p>
+    {{end}}
+    {{else}}
+    <p class="hint">
+      Този имейл се изпраща до подателя на запитването, затова няма задаваеми получатели.
+    </p>
+    {{end}}
+
     <div class="form-actions">
       <button type="submit" class="btn btn-primary">Запази</button>
       <button type="button" class="btn"

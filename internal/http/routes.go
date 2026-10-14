@@ -30,6 +30,11 @@ func (a *App) routeCustomer(mux *http.ServeMux) {
 	mux.HandleFunc("GET /clients/search", a.requireUser(a.handleClientSearch))
 	mux.HandleFunc("GET /clients/{code}", a.requireUser(a.handleClient))
 	mux.HandleFunc("POST /clients/{code}/request", a.requireUser(a.handleRequestSubmit))
+	mux.HandleFunc("GET /info", a.requireUser(a.handleInfo))
+	mux.HandleFunc("GET /info/search", a.requireUser(a.handleInfoSearch))
+	mux.HandleFunc("GET /info/username-check", a.requireUser(a.handleUsernameCheck))
+	mux.HandleFunc("GET /info/{code}", a.requireUser(a.handleInfoDetail))
+	mux.HandleFunc("POST /info/{code}/profile-request", a.requireUser(a.handleProfileRequest))
 	mux.HandleFunc("GET /modules", a.requireUser(a.handleModules))
 	mux.HandleFunc("GET /modules/list", a.requireUser(a.handleModulesList))
 

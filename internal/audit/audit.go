@@ -32,6 +32,8 @@ const (
 	RequestApproved  = "request.approved"
 	RequestDenied    = "request.denied"
 
+	ProfileRequestSubmitted = "profile_request.submitted"
+
 	ActivationCreated  = "activation.created"
 	ActivationUpdated  = "activation.updated"
 	ActivationRevoked  = "activation.revoked"

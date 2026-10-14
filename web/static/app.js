@@ -177,3 +177,75 @@ document.body.addEventListener('htmx:beforeSwap', (evt) => {
     evt.detail.shouldSwap = true;
   }
 });
+
+/* Copy buttons, popup dialogs and the username status. Delegated from the
+ * document, so they keep working on content that htmx swaps in. */
+
+/* Copies text, falling back to a hidden textarea where the async clipboard
+ * API is unavailable (plain-HTTP origins other than localhost). */
+function copyText(text) {
+  if (navigator.clipboard && window.isSecureContext) {
+    return navigator.clipboard.writeText(text).then(() => true, () => false);
+  }
+  return new Promise((resolve) => {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.setAttribute('readonly', '');
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    let ok = false;
+    try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
+    document.body.removeChild(ta);
+    resolve(ok);
+  });
+}
+
+document.addEventListener('click', (e) => {
+  const copy = e.target.closest('[data-copy]');
+  if (copy) {
+    if (copy.disabled) return;
+    copyText(copy.dataset.copy).then((ok) => {
+      const status = document.getElementById('copy-status');
+      if (status) status.textContent = ok ? 'Копирано' : 'Копирането не беше възможно';
+      copy.classList.toggle('copied', ok);
+      setTimeout(() => {
+        copy.classList.remove('copied');
+        if (status) status.textContent = '';
+      }, 1500);
+    });
+    return;
+  }
+
+  const open = e.target.closest('[data-dialog-open]');
+  if (open) {
+    const d = document.getElementById(open.dataset.dialogOpen);
+    if (d && typeof d.showModal === 'function') d.showModal();
+    return;
+  }
+
+  const close = e.target.closest('[data-dialog-close]');
+  if (close) {
+    const d = close.closest('dialog');
+    if (d) d.close();
+  }
+});
+
+/* A dialog that closes after a successful submission reloads the page, so the
+ * next time it opens it shows a fresh, empty form. 'close' does not bubble,
+ * hence the capture phase. */
+document.addEventListener('close', (e) => {
+  if (e.target.tagName === 'DIALOG' && e.target.querySelector('[data-done]')) {
+    window.location.reload();
+  }
+}, true);
+
+/* Typing in a field clears the status shown beside it (data-clears names the
+ * status element), so a stale check result never lingers. */
+document.addEventListener('input', (e) => {
+  const id = e.target.dataset && e.target.dataset.clears;
+  if (!id) return;
+  const el = document.getElementById(id);
+  if (el) el.textContent = '';
+});

@@ -530,3 +530,25 @@ recovery: none of them had it before, and an unrecovered panic in any
 goroutine — from this or any other cause — brings down the whole process, not
 just that job. Re-run `govulncheck ./...` after any excelize upgrade to check
 whether this clears.
+
+## Stores are identified by MANDANT_ID
+
+A store has two fields: its **MANDANT_NAME** (the name; the former separate
+"external value" is gone, as it was always the same) and its **MANDANT_ID**,
+both unique. Migration 0006 removes the stores that existed before (and their
+user assignments), since they carry no MANDANT_ID; they are re-created in the
+admin panel.
+
+- The external queries that selected clients by store (`V_CATALOG_USERS`, the
+  client list and the client lookup) now filter and return by `MANDANT_ID`
+  instead of `MANDANT_NAME`. **This assumes `V_CATALOG_USERS` has a
+  `MANDANT_ID` column.**
+- Access to a client compares the client's `MANDANT_ID` with the `MANDANT_ID`
+  of the user's stores - a store with the right name but another id gives no
+  access.
+- Activations and requests recorded in this application keep a snapshot of the
+  store's MANDANT_NAME, so the "Списък" page still matches them by the store's
+  name.
+- The transports of a customer are looked up by the `MANDANT_ID` of the stored
+  store whose name equals the customer's serving store (`Mandant_Name`); a
+  customer whose store is not kept here has no transport options.

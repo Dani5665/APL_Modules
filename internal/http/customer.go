@@ -105,7 +105,7 @@ func (a *App) handleUserLogin(w http.ResponseWriter, r *http.Request) {
 // the first page after login asks for it. A failure is only logged: the page
 // that needs the list reports the error itself.
 func (a *App) warmClientCache(u *store.User) {
-	stores := u.StoreExternalValues()
+	stores := u.StoreMandantIDs()
 	if len(stores) == 0 {
 		return
 	}
@@ -147,7 +147,7 @@ type homeView struct {
 // itself is fetched by htmx right after the page loads, so the page appears
 // at once even while the external database is still answering.
 func (a *App) handleHome(w http.ResponseWriter, r *http.Request) {
-	v := homeView{view: a.newView(r, "Клиенти", "home")}
+	v := homeView{view: a.newView(r, "Потребители - NEXT", "home")}
 	v.Search = strings.TrimSpace(r.URL.Query().Get("q"))
 
 	// The page links of the results point back here, so the first load of the
@@ -174,14 +174,14 @@ func (a *App) handleClientSearch(w http.ResponseWriter, r *http.Request) {
 	u := userFrom(r.Context())
 	search := strings.TrimSpace(r.URL.Query().Get("q"))
 
-	v := homeView{view: a.newView(r, "Клиенти", "home"), Search: search}
+	v := homeView{view: a.newView(r, "Потребители - NEXT", "home"), Search: search}
 	v.ClientPage = pagination{
 		Page:     pageParam(r),
 		PageSize: clientSearchPageSize,
 		Query:    map[string]string{"q": search},
 	}
 
-	all, err := a.Directory.ListClientsByStores(r.Context(), u.StoreExternalValues())
+	all, err := a.Directory.ListClientsByStores(r.Context(), u.StoreMandantIDs())
 	if err != nil {
 		a.Log.Error("clients could not be loaded from the external directory", "error", err)
 		v.Unavailable = true
@@ -267,7 +267,7 @@ func (a *App) loadModulesPage(r *http.Request) (clients []store.ClientSummary, p
 		Query:    map[string]string{"q": search},
 	}
 
-	clients, total, err := a.DB.ListActiveClientsByStores(r.Context(), u.StoreExternalValues(), search,
+	clients, total, err := a.DB.ListActiveClientsByStores(r.Context(), u.StoreNames(), search,
 		p.PageSize, p.Offset())
 	if err != nil {
 		a.Log.Error("modules list could not be loaded", "error", err)
@@ -341,7 +341,7 @@ func (a *App) authorizeClient(w http.ResponseWriter, r *http.Request, u *store.U
 		return external.Client{}, err
 	}
 
-	if err := requests.CheckStoreAccess(u, client.Store); err != nil {
+	if err := requests.CheckStoreAccess(u, client.MandantID); err != nil {
 		return deny(err.Error())
 	}
 	return *client, nil

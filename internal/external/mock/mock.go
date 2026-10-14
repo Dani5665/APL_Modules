@@ -8,17 +8,25 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"time"
 
 	"haynesproform/internal/external"
 )
 
-// Store values as they would appear in the external database. The local
-// stores table must carry these as external_value.
+// Store names (MANDANT_NAME) and ids (MANDANT_ID) as they would appear in the
+// external database. The local stores table must carry the same pairs.
 const (
-	StoreSofia   = "SOFIA"
-	StoreVarna   = "VARNA"
-	StorePlovdiv = "PLOVDIV"
+	StoreSofia   = "Магазин София"
+	StoreVarna   = "Магазин Варна"
+	StorePlovdiv = "Магазин Пловдив"
+
+	MandantSofia   = "1"
+	MandantVarna   = "2"
+	MandantPlovdiv = "3"
 )
+
+// MandantID returns the MANDANT_ID of a mock store by its name.
+func MandantID(storeName string) string { return mandantIDs[storeName] }
 
 // Directory is a seeded, concurrency-safe implementation of
 // external.Directory.
@@ -88,11 +96,11 @@ func (d *Directory) seed() {
 
 	for _, c := range seedClients {
 		d.clients = append(d.clients, external.Client{
-			Code: c.code, Name: c.name, Object: c.object, Store: c.store,
+			Code: c.code, Name: c.name, Object: c.object, Store: c.store, MandantID: mandantIDs[c.store],
 		})
 		users := make([]string, 0, c.users)
 		for i := 0; i < c.users; i++ {
-			users = append(users, fmt.Sprintf("%s_%s", usernamePrefixes[i%len(usernamePrefixes)], c.code))
+			users = append(users, fmt.Sprintf("%s%s", usernamePrefixes[i%len(usernamePrefixes)], c.code))
 		}
 		sort.Strings(users)
 		d.logins[c.code] = users
@@ -146,24 +154,24 @@ func (d *Directory) ListClientLogins(ctx context.Context, clientCode string) ([]
 }
 
 // ListClientsByStores implements external.Directory.
-func (d *Directory) ListClientsByStores(ctx context.Context, storeValues []string) ([]external.Client, error) {
+func (d *Directory) ListClientsByStores(ctx context.Context, mandantIDs []string) ([]external.Client, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	if len(storeValues) == 0 {
+	if len(mandantIDs) == 0 {
 		return nil, nil
 	}
 	d.mu.RLock()
 	defer d.mu.RUnlock()
 
-	want := make(map[string]bool, len(storeValues))
-	for _, v := range storeValues {
+	want := make(map[string]bool, len(mandantIDs))
+	for _, v := range mandantIDs {
 		want[strings.ToLower(strings.TrimSpace(v))] = true
 	}
 
 	var out []external.Client
 	for _, c := range d.clients {
-		if want[strings.ToLower(c.Store)] {
+		if want[strings.ToLower(c.MandantID)] {
 			out = append(out, c)
 		}
 	}
@@ -187,4 +195,137 @@ func (d *Directory) Clients() []external.Client {
 	d.mu.RLock()
 	defer d.mu.RUnlock()
 	return append([]external.Client(nil), d.clients...)
+}
+
+// noProfileCustomerCode is a seeded customer that has no catalog profile, to
+// exercise the "no profile" state.
+const noProfileCustomerCode = "100000099"
+
+// customers builds the customer information list from the seeded clients,
+// with some contact fields left empty on purpose.
+func (d *Directory) customers() []external.Customer {
+	var out []external.Customer
+	for i, c := range d.clients {
+		cu := external.Customer{Code: c.Code, Name: c.Name, Mandant: c.Store}
+		if i%3 != 2 {
+			cu.Address = fmt.Sprintf("гр. %s, ул. Примерна %d", map[string]string{
+				StoreSofia: "София", StoreVarna: "Варна", StorePlovdiv: "Пловдив"}[c.Store], 10+i)
+		}
+		if i%4 != 3 {
+			cu.Phone = fmt.Sprintf("088 %03d %04d", 100+i, 1000+i*7)
+		}
+		if i%5 != 4 {
+			cu.AccountablePerson = []string{"Иван Иванов", "Мария Петрова", "Георги Димитров"}[i%3]
+		}
+		out = append(out, cu)
+	}
+	out = append(out, external.Customer{Code: noProfileCustomerCode, Name: "Клиент без профил ЕООД"})
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Name != out[j].Name {
+			return out[i].Name < out[j].Name
+		}
+		return out[i].Code < out[j].Code
+	})
+	return out
+}
+
+// ListCustomers implements external.Directory.
+func (d *Directory) ListCustomers(ctx context.Context) ([]external.Customer, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	d.mu.RLock()
+	defer d.mu.RUnlock()
+	return d.customers(), nil
+}
+
+// GetCustomer implements external.Directory.
+func (d *Directory) GetCustomer(ctx context.Context, code string) (*external.Customer, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	d.mu.RLock()
+	defer d.mu.RUnlock()
+
+	code = strings.TrimSpace(code)
+	for _, c := range d.customers() {
+		if c.Code == code {
+			out := c
+			return &out, nil
+		}
+	}
+	return nil, external.ErrNotFound
+}
+
+// ListProfiles implements external.Directory. Every username of a seeded
+// client becomes a profile; the last one of each client is inactive and the
+// first has never logged in.
+func (d *Directory) ListProfiles(ctx context.Context, code string) ([]external.Profile, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	d.mu.RLock()
+	defer d.mu.RUnlock()
+
+	code = strings.TrimSpace(code)
+	var store string
+	for _, c := range d.clients {
+		if c.Code == code {
+			store = c.Store
+		}
+	}
+	users := d.logins[code]
+	out := make([]external.Profile, 0, len(users))
+	for i, u := range users {
+		p := external.Profile{
+			Login: u, Password: "Parola" + code[len(code)-4:] + fmt.Sprint(i), Mandant: store,
+			Active: !(len(users) > 1 && i == len(users)-1),
+		}
+		if i > 0 {
+			p.LastLogin = time.Date(2026, 9, 1+i, 9+i, 30, 0, 0, time.UTC)
+		}
+		out = append(out, p)
+	}
+	return out, nil
+}
+
+// mandantIDs are the mock stores' ids in the transport view.
+var mandantIDs = map[string]string{StoreSofia: MandantSofia, StoreVarna: MandantVarna, StorePlovdiv: MandantPlovdiv}
+
+// transports are the seeded transport options per mandant id.
+var transports = map[string][]string{
+	"1": {"Куриер Спиди", "Лична доставка", "Собствен транспорт"},
+	"2": {"Куриер Еконт", "Лична доставка"},
+	// Plovdiv has none, to exercise an empty list.
+}
+
+// LoginExists implements external.Directory: a login is taken when any seeded
+// client or salesperson uses it.
+func (d *Directory) LoginExists(ctx context.Context, login string) (bool, error) {
+	if err := ctx.Err(); err != nil {
+		return false, err
+	}
+	d.mu.RLock()
+	defer d.mu.RUnlock()
+
+	login = strings.ToLower(strings.TrimSpace(login))
+	if _, ok := d.salers[login]; ok {
+		return true, nil
+	}
+	for _, users := range d.logins {
+		for _, u := range users {
+			if strings.ToLower(u) == login {
+				return true, nil
+			}
+		}
+	}
+	return false, nil
+}
+
+// ListTransports implements external.Directory.
+func (d *Directory) ListTransports(ctx context.Context, mandantID string) ([]string, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	return append([]string(nil), transports[strings.TrimSpace(mandantID)]...), nil
 }

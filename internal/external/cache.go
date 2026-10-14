@@ -125,15 +125,15 @@ func (c *Cached) ListClientLogins(ctx context.Context, clientCode string) ([]str
 }
 
 // ListClientsByStores implements Directory.
-func (c *Cached) ListClientsByStores(ctx context.Context, storeValues []string) ([]Client, error) {
-	key := make([]string, len(storeValues))
-	for i, s := range storeValues {
+func (c *Cached) ListClientsByStores(ctx context.Context, mandantIDs []string) ([]Client, error) {
+	key := make([]string, len(mandantIDs))
+	for i, s := range mandantIDs {
 		key[i] = strings.ToLower(strings.TrimSpace(s))
 	}
 	sort.Strings(key)
 
 	v, err := c.get("clients\x00"+strings.Join(key, "\x01"), c.listTTL, func() (any, error) {
-		return c.inner.ListClientsByStores(ctx, storeValues)
+		return c.inner.ListClientsByStores(ctx, mandantIDs)
 	})
 	clients, _ := v.([]Client)
 	return append([]Client(nil), clients...), err
@@ -144,3 +144,49 @@ func (c *Cached) Ping(ctx context.Context) error { return c.inner.Ping(ctx) }
 
 // Close implements Directory.
 func (c *Cached) Close() error { return c.inner.Close() }
+
+// ListCustomers implements Directory.
+func (c *Cached) ListCustomers(ctx context.Context) ([]Customer, error) {
+	v, err := c.get("customers", c.listTTL, func() (any, error) {
+		return c.inner.ListCustomers(ctx)
+	})
+	list, _ := v.([]Customer)
+	return append([]Customer(nil), list...), err
+}
+
+// GetCustomer implements Directory.
+func (c *Cached) GetCustomer(ctx context.Context, code string) (*Customer, error) {
+	v, err := c.get("customer\x00"+strings.TrimSpace(code), shortTTL, func() (any, error) {
+		return c.inner.GetCustomer(ctx, code)
+	})
+	cu, _ := v.(*Customer)
+	if cu == nil {
+		return nil, err
+	}
+	out := *cu
+	return &out, err
+}
+
+// ListProfiles implements Directory.
+func (c *Cached) ListProfiles(ctx context.Context, code string) ([]Profile, error) {
+	v, err := c.get("profiles\x00"+strings.TrimSpace(code), shortTTL, func() (any, error) {
+		return c.inner.ListProfiles(ctx, code)
+	})
+	list, _ := v.([]Profile)
+	return append([]Profile(nil), list...), err
+}
+
+// LoginExists implements Directory. It is never cached: a username taken a
+// moment ago must be reported as taken.
+func (c *Cached) LoginExists(ctx context.Context, login string) (bool, error) {
+	return c.inner.LoginExists(ctx, login)
+}
+
+// ListTransports implements Directory.
+func (c *Cached) ListTransports(ctx context.Context, mandantID string) ([]string, error) {
+	v, err := c.get("transports\x00"+strings.TrimSpace(mandantID), shortTTL, func() (any, error) {
+		return c.inner.ListTransports(ctx, mandantID)
+	})
+	list, _ := v.([]string)
+	return append([]string(nil), list...), err
+}

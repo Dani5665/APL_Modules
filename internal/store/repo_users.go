@@ -8,11 +8,11 @@ import (
 	"haynesproform/internal/dates"
 )
 
-const userColumns = `id, email, password_hash, must_change_password, active, created_at, updated_at`
+const userColumns = `id, email, name, password_hash, must_change_password, active, created_at, updated_at`
 
 func scanUser(s interface{ Scan(...any) error }) (*User, error) {
 	var u User
-	err := s.Scan(&u.ID, &u.Email, &u.PasswordHash, &u.MustChangePassword,
+	err := s.Scan(&u.ID, &u.Email, &u.Name, &u.PasswordHash, &u.MustChangePassword,
 		&u.Active, &u.CreatedAt, &u.UpdatedAt)
 	if err != nil {
 		return nil, classify(err)
@@ -92,14 +92,14 @@ func (db *DB) ListUsers(ctx context.Context, f UserFilter) ([]User, error) {
 }
 
 // CreateUser inserts a salesperson and assigns their stores.
-func (db *DB) CreateUser(ctx context.Context, email, passwordHash string, storeIDs []int64, mustChange bool) (int64, error) {
+func (db *DB) CreateUser(ctx context.Context, email, name, passwordHash string, storeIDs []int64, mustChange bool) (int64, error) {
 	var id int64
 	err := db.InTx(ctx, func(tx *sql.Tx) error {
 		now := dates.NowUTC()
 		res, err := tx.ExecContext(ctx,
-			`INSERT INTO users (email, password_hash, must_change_password, created_at, updated_at)
-			 VALUES (?, ?, ?, ?, ?)`,
-			email, passwordHash, mustChange, now, now)
+			`INSERT INTO users (email, name, password_hash, must_change_password, created_at, updated_at)
+			 VALUES (?, ?, ?, ?, ?, ?)`,
+			email, name, passwordHash, mustChange, now, now)
 		if err != nil {
 			return classify(err)
 		}
@@ -109,6 +109,13 @@ func (db *DB) CreateUser(ctx context.Context, email, passwordHash string, storeI
 		return db.setUserStores(ctx, tx, id, storeIDs)
 	})
 	return id, err
+}
+
+// SetUserName replaces a salesperson's display name.
+func (db *DB) SetUserName(ctx context.Context, id int64, name string) error {
+	_, err := db.ExecContext(ctx, `UPDATE users SET name = ?, updated_at = ? WHERE id = ?`,
+		name, dates.NowUTC(), id)
+	return classify(err)
 }
 
 // SetUserStores replaces a salesperson's store assignments.

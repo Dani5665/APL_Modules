@@ -7,11 +7,11 @@ import (
 	"haynesproform/internal/dates"
 )
 
-const storeColumns = `id, name, external_value, active, created_at, updated_at`
+const storeColumns = `id, name, mandant_id, active, created_at, updated_at`
 
 func scanStore(s interface{ Scan(...any) error }) (*Store, error) {
 	var st Store
-	if err := s.Scan(&st.ID, &st.Name, &st.ExternalValue, &st.Active, &st.CreatedAt, &st.UpdatedAt); err != nil {
+	if err := s.Scan(&st.ID, &st.Name, &st.MandantID, &st.Active, &st.CreatedAt, &st.UpdatedAt); err != nil {
 		return nil, classify(err)
 	}
 	return &st, nil
@@ -42,7 +42,7 @@ func (db *DB) ListStores(ctx context.Context, activeOnly bool) ([]Store, error) 
 	var out []Store
 	for rows.Next() {
 		var s Store
-		if err := rows.Scan(&s.ID, &s.Name, &s.ExternalValue, &s.Active,
+		if err := rows.Scan(&s.ID, &s.Name, &s.MandantID, &s.Active,
 			&s.CreatedAt, &s.UpdatedAt, &s.UserCount); err != nil {
 			return nil, classify(err)
 		}
@@ -51,29 +51,23 @@ func (db *DB) ListStores(ctx context.Context, activeOnly bool) ([]Store, error) 
 	return out, classify(rows.Err())
 }
 
-// CreateStore inserts a store. An empty externalValue defaults to the name.
-func (db *DB) CreateStore(ctx context.Context, name, externalValue string) (int64, error) {
-	if externalValue == "" {
-		externalValue = name
-	}
+// CreateStore inserts a store. Both the name and the MANDANT_ID are unique.
+func (db *DB) CreateStore(ctx context.Context, name, mandantID string) (int64, error) {
 	now := dates.NowUTC()
 	res, err := db.ExecContext(ctx,
-		`INSERT INTO stores (name, external_value, created_at, updated_at) VALUES (?, ?, ?, ?)`,
-		name, externalValue, now, now)
+		`INSERT INTO stores (name, mandant_id, created_at, updated_at) VALUES (?, ?, ?, ?)`,
+		name, mandantID, now, now)
 	if err != nil {
 		return 0, classify(err)
 	}
 	return res.LastInsertId()
 }
 
-// UpdateStore changes a store's name, external value and active flag.
-func (db *DB) UpdateStore(ctx context.Context, id int64, name, externalValue string, active bool) error {
-	if externalValue == "" {
-		externalValue = name
-	}
+// UpdateStore changes a store's name, MANDANT_ID and active flag.
+func (db *DB) UpdateStore(ctx context.Context, id int64, name, mandantID string, active bool) error {
 	_, err := db.ExecContext(ctx,
-		`UPDATE stores SET name = ?, external_value = ?, active = ?, updated_at = ? WHERE id = ?`,
-		name, externalValue, active, dates.NowUTC(), id)
+		`UPDATE stores SET name = ?, mandant_id = ?, active = ?, updated_at = ? WHERE id = ?`,
+		name, mandantID, active, dates.NowUTC(), id)
 	return classify(err)
 }
 

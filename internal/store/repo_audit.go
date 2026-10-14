@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"strings"
+	"time"
 
 	"haynesproform/internal/dates"
 )
@@ -132,4 +133,17 @@ func (db *DB) DistinctAuditActions(ctx context.Context) ([]string, error) {
 		out = append(out, a)
 	}
 	return out, classify(rows.Err())
+}
+
+// AuditRetentionMonths is how long audit entries are kept.
+const AuditRetentionMonths = 3
+
+// PurgeAuditBefore deletes audit entries recorded before the cutoff and
+// returns how many were removed.
+func (db *DB) PurgeAuditBefore(ctx context.Context, cutoff time.Time) (int64, error) {
+	res, err := db.ExecContext(ctx, `DELETE FROM audit_log WHERE created_at < ?`, dates.FormatUTC(cutoff))
+	if err != nil {
+		return 0, classify(err)
+	}
+	return res.RowsAffected()
 }

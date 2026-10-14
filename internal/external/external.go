@@ -6,13 +6,13 @@ package external
 import (
 	"context"
 	"errors"
+	"time"
 )
 
 // Saler is a salesperson as the external directory knows them.
 type Saler struct {
 	Login string
-	// Store is the external store value, compared against Store.ExternalValue
-	// in the local database.
+	// Store is the salesperson's MANDANT_NAME.
 	Store string
 }
 
@@ -27,6 +27,48 @@ type Client struct {
 	// a client read from there. See DECISIONS.md.
 	Object string
 	Store  string
+	// MandantID is the MANDANT_ID of the client's store, which is what stores
+	// are matched and searched by.
+	MandantID string
+}
+
+// Customer is one row of the customer information view
+// (V_EXT_CUSTOMERS_INFO), for the "Информация клиенти" page. Any field other
+// than Code may be empty.
+type Customer struct {
+	Code              string
+	Name              string
+	Mandant           string // the serving store
+	Address           string
+	Phone             string
+	AccountablePerson string
+}
+
+// Profile is one of a customer's own accounts in the catalog
+// (V_CATALOG_USERS, IS_WHO_SALER = 0).
+type Profile struct {
+	Login    string
+	Password string
+	Mandant  string
+	// LastLogin is the zero time when the profile has never logged in.
+	LastLogin time.Time
+	Active    bool
+}
+
+// FirstPerCode keeps the first row seen for each customer code, in order. The
+// view returns several rows per customer carrying the same information, so
+// the first one is used.
+func FirstPerCode(rows []Customer) []Customer {
+	seen := make(map[string]bool, len(rows))
+	out := make([]Customer, 0, len(rows))
+	for _, c := range rows {
+		if seen[c.Code] {
+			continue
+		}
+		seen[c.Code] = true
+		out = append(out, c)
+	}
+	return out
 }
 
 // Directory is the read-only view of the external database.
@@ -45,8 +87,27 @@ type Directory interface {
 	ListClientLogins(ctx context.Context, clientCode string) ([]string, error)
 
 	// ListClientsByStores returns every client tied to any of the given
-	// external store values.
-	ListClientsByStores(ctx context.Context, storeValues []string) ([]Client, error)
+	// MANDANT_IDs.
+	ListClientsByStores(ctx context.Context, mandantIDs []string) ([]Client, error)
+
+	// ListCustomers returns every customer (one entry per customer code), for
+	// the customer information list.
+	ListCustomers(ctx context.Context) ([]Customer, error)
+
+	// GetCustomer returns the information about one customer by code.
+	GetCustomer(ctx context.Context, code string) (*Customer, error)
+
+	// LoginExists reports whether any catalog account (customer or
+	// salesperson) already uses the login.
+	LoginExists(ctx context.Context, login string) (bool, error)
+
+	// ListTransports returns the transport options of a serving store, by its
+	// mandant id, sorted.
+	ListTransports(ctx context.Context, mandantID string) ([]string, error)
+
+	// ListProfiles returns the customer's own catalog profiles, with their
+	// passwords, for the given code. An empty result means no profile exists.
+	ListProfiles(ctx context.Context, code string) ([]Profile, error)
 
 	// Ping reports whether the directory is reachable.
 	Ping(ctx context.Context) error

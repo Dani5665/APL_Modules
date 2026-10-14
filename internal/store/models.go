@@ -39,7 +39,7 @@ func (s RequestStatus) Label() string {
 	case StatusPending:
 		return "Чакащо"
 	case StatusApproved:
-		return "Одобрено"
+		return "Обработено"
 	case StatusDenied:
 		return "Отказано"
 	}
@@ -62,8 +62,10 @@ type Admin struct {
 
 // User is a salesperson account.
 type User struct {
-	ID                 int64
-	Email              string
+	ID    int64
+	Email string
+	// Name is the display name shown as the sender of requests.
+	Name               string
 	PasswordHash       string
 	MustChangePassword bool
 	Active             bool
@@ -73,39 +75,50 @@ type User struct {
 	Stores []Store
 }
 
-// StoreExternalValues returns the external values of the user's stores, which
-// is what authorization compares against.
-func (u User) StoreExternalValues() []string {
+// StoreMandantIDs returns the MANDANT_IDs of the user's stores, which is what
+// the external database is searched by and authorization compares against.
+func (u User) StoreMandantIDs() []string {
 	out := make([]string, 0, len(u.Stores))
 	for _, s := range u.Stores {
-		out = append(out, s.ExternalValue)
+		out = append(out, s.MandantID)
 	}
 	return out
 }
 
-// HasStoreValue reports whether the user is assigned a store whose external
-// value matches v, compared case-insensitively and ignoring surrounding space.
-func (u User) HasStoreValue(v string) bool {
-	v = strings.ToLower(strings.TrimSpace(v))
-	if v == "" {
+// StoreNames returns the MANDANT_NAMEs of the user's stores, which is how
+// activations recorded in this application are tied to a store.
+func (u User) StoreNames() []string {
+	out := make([]string, 0, len(u.Stores))
+	for _, s := range u.Stores {
+		out = append(out, s.Name)
+	}
+	return out
+}
+
+// HasMandantID reports whether the user is assigned the store with the given
+// MANDANT_ID, ignoring case and surrounding space.
+func (u User) HasMandantID(id string) bool {
+	id = strings.ToLower(strings.TrimSpace(id))
+	if id == "" {
 		return false
 	}
 	for _, s := range u.Stores {
-		if strings.ToLower(strings.TrimSpace(s.ExternalValue)) == v {
+		if strings.ToLower(strings.TrimSpace(s.MandantID)) == id {
 			return true
 		}
 	}
 	return false
 }
 
-// Store is a local shop record mapped to a value in the external database.
+// Store is a shop: its MANDANT_NAME and the MANDANT_ID the external database
+// is searched by.
 type Store struct {
-	ID            int64
-	Name          string
-	ExternalValue string
-	Active        bool
-	CreatedAt     string
-	UpdatedAt     string
+	ID        int64
+	Name      string // MANDANT_NAME
+	MandantID string // MANDANT_ID
+	Active    bool
+	CreatedAt string
+	UpdatedAt string
 	// UserCount is populated by listings that need it.
 	UserCount int
 }

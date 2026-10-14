@@ -23,6 +23,7 @@ import (
 	"haynesproform/internal/audit"
 	"haynesproform/internal/auth"
 	"haynesproform/internal/config"
+	"haynesproform/internal/dates"
 	"haynesproform/internal/demo"
 	"haynesproform/internal/email"
 	"haynesproform/internal/export"
@@ -197,10 +198,17 @@ func openDirectory(ctx context.Context, cfg config.Config, log *slog.Logger) (ex
 
 	case config.ExternalMSSQL:
 		dir, err := mssqldir.Open(ctx, cfg.MSSQLDSN)
-		if err != nil {
+		if dir == nil {
 			return nil, fmt.Errorf("external database: %w", err)
 		}
-		log.Info("connected to the external database")
+		if err != nil {
+			// Not fatal: the admin panel and every local page work without it, and
+			// the pages that need it show the "database unavailable" message until
+			// it answers again.
+			log.Error("the external database is not reachable; continuing without it", "error", err)
+		} else {
+			log.Info("connected to the external database")
+		}
 		return external.NewCached(dir, cfg.ClientListCacheTTL), nil
 	}
 	return nil, fmt.Errorf("unsupported EXTERNAL_DB_MODE %q", cfg.ExternalMode)
@@ -255,14 +263,27 @@ const (
 	purgeInterval  = 15 * time.Minute
 	backupInterval = 24 * time.Hour
 	backupsKept    = 14
+
+	// retentionHour is the hour (Europe/Sofia) after which the daily cleanup of
+	// old audit entries and emails runs, when few users are logged in.
+	retentionHour = 20
 )
 
-// runHousekeeping purges expired sessions and takes the daily online backup.
+// runHousekeeping purges expired sessions, takes the daily online backup and,
+// once a day after 20:00, deletes audit entries and emails past their
+// retention.
 func runHousekeeping(ctx context.Context, db *store.DB, cfg config.Config, log *slog.Logger) {
 	purge := time.NewTicker(purgeInterval)
 	defer purge.Stop()
 	backup := time.NewTicker(backupInterval)
 	defer backup.Stop()
+
+	// The retention cleanup is not run at startup: it waits for the evening.
+	untilRetention := func() time.Duration {
+		return time.Until(dates.NextDailyAt(time.Now(), retentionHour))
+	}
+	retention := time.NewTimer(untilRetention())
+	defer retention.Stop()
 
 	idleCutoff := func() time.Time { return time.Now().Add(-cfg.SessionIdleTimeout) }
 	doPurge := func() {
@@ -270,7 +291,11 @@ func runHousekeeping(ctx context.Context, db *store.DB, cfg config.Config, log *
 			log.Error("expired sessions could not be purged", "error", err)
 		}
 	}
+	doRetention := func() { purgeOld(ctx, db, log) }
 	doBackup := func() { takeBackup(ctx, db, cfg, log) }
+
+	log.Info("retention cleanup scheduled",
+		"next_run", dates.NextDailyAt(time.Now(), retentionHour).Format(time.RFC3339))
 
 	safeCall(log, "housekeeping", doPurge)
 	safeCall(log, "housekeeping", doBackup)
@@ -284,7 +309,29 @@ func runHousekeeping(ctx context.Context, db *store.DB, cfg config.Config, log *
 			safeCall(log, "housekeeping", doPurge)
 		case <-backup.C:
 			safeCall(log, "housekeeping", doBackup)
+		case <-retention.C:
+			safeCall(log, "housekeeping", doRetention)
+			retention.Reset(untilRetention())
 		}
+	}
+}
+
+// purgeOld deletes audit entries and emails older than their retention.
+func purgeOld(ctx context.Context, db *store.DB, log *slog.Logger) {
+	now := time.Now()
+
+	cutoff := dates.AddMonths(now, -store.AuditRetentionMonths)
+	if n, err := db.PurgeAuditBefore(ctx, cutoff); err != nil {
+		log.Error("old audit entries could not be purged", "error", err)
+	} else {
+		log.Info("old audit entries deleted", "count", n)
+	}
+
+	mailCutoff := dates.AddMonths(now, -store.OutboxRetentionMonths)
+	if n, err := db.PurgeOutboxBefore(ctx, mailCutoff); err != nil {
+		log.Error("old emails could not be purged", "error", err)
+	} else {
+		log.Info("old emails deleted", "count", n)
 	}
 }
 

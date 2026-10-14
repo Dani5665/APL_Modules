@@ -41,6 +41,14 @@ const (
 	PHRequestLink    = "request_link"
 	PHExportDate     = "export_date"
 	PHActiveCount    = "active_count"
+
+	PHProfileUsername  = "username"
+	PHProfilePassword  = "password"
+	PHProfileStore     = "store_name"
+	PHProfileTransport = "transport"
+	PHSubmitterName    = "submitter_name"
+	PHSubmitterStores  = "submitter_stores"
+	PHComment          = "comment"
 )
 
 // commonPlaceholders are available in the three request templates.
@@ -73,6 +81,19 @@ var placeholdersByTemplate = map[string][]Placeholder{
 	),
 	TemplateRequestApproved: append(append([]Placeholder{}, commonPlaceholders...), decisionPlaceholders...),
 	TemplateRequestDenied:   append(append([]Placeholder{}, commonPlaceholders...), decisionPlaceholders...),
+	TemplateProfileRequest: {
+		{PHClientCode, "Клиентски номер", "100000001"},
+		{PHClientName, "Име на клиент", "Автосервиз Балкан ЕООД"},
+		{PHProfileStore, "Обслужващ обект", "Магазин София"},
+		{PHProfileUsername, "Заявено потребителско име", "balkan2026"},
+		{PHProfilePassword, "Заявена парола", "Parola123"},
+		{PHProfileTransport, "Транспорт", "Куриер Спиди"},
+		{PHSubmitterName, "Име на подателя", "Иван Петров"},
+		{PHSubmitterEmail, "Имейл на подателя", "prodavach@example.com"},
+		{PHSubmitterStores, "Обекти на подателя", "Магазин София"},
+		{PHComment, "Коментар", "Спешно, моля."},
+		{PHRequestDate, "Дата на подаване", "17.09.2026"},
+	},
 	TemplateScheduledExport: {
 		{PHExportDate, "Дата на справката", "01.10.2026"},
 		{PHActiveCount, "Брой активни модули в справката", "128"},

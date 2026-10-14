@@ -746,3 +746,144 @@ td.group-indent { padding-left: 1.4rem; }
 
 .card h3 { margin-top: 1.2rem; }
 .card h3:first-child { margin-top: 0; }
+
+/* A titled group of links in the side menu. */
+.side-nav { gap: .9rem; }
+.side-nav-group { display: flex; flex-direction: column; gap: .15rem; }
+.side-nav-title {
+  padding: .5rem .7rem .3rem;
+  font-size: .75rem;
+  font-weight: 700;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.side-nav-group a { padding-left: 1.2rem; }
+
+.scroll-more { padding: .8rem; text-align: center; color: var(--text-muted); font-size: .9rem; }
+
+/* ---------- Copy buttons ---------- */
+
+.copy-row { display: flex; align-items: center; gap: .5rem; min-width: 0; }
+.copy-row > span { overflow-wrap: anywhere; }
+.copy-btn {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  color: var(--text-muted);
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+.copy-btn:hover:not(:disabled) { color: var(--accent-dark); background: var(--accent-soft); }
+.copy-btn:disabled { opacity: .4; cursor: not-allowed; }
+.copy-btn.copied { color: var(--success); border-color: var(--success); background: var(--success-soft); }
+
+/* ---------- Popup dialog ---------- */
+
+dialog.modal {
+  width: min(680px, calc(100vw - 1.5rem));
+  max-height: calc(100vh - 1.5rem);
+  max-height: calc(100dvh - 1.5rem);
+  overflow-y: auto;
+  padding: 1.2rem;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 18px 50px rgba(22, 32, 44, .35);
+}
+dialog.modal::backdrop { background: rgba(22, 32, 44, .5); }
+.modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+  padding-bottom: .7rem;
+  border-bottom: 1px solid var(--border);
+}
+.modal-head h2 { margin: 0; }
+
+input[readonly] { background: #eef1f5; color: var(--text-muted); }
+
+.label { display: block; font-weight: 600; margin-bottom: .3rem; font-size: .9rem; }
+.plain-list { margin: 0; padding-left: 1.1rem; }
+
+/* A field with a result shown beside it (the username check). */
+.input-status { display: flex; align-items: center; gap: .6rem; flex-wrap: wrap; }
+.input-status input { flex: 1 1 10rem; min-width: 0; }
+.field-status { display: inline-flex; align-items: center; gap: .4rem; font-size: .88rem; }
+.status-ok { color: var(--success); font-size: 1.4rem; font-weight: 700; line-height: 1; }
+.status-bad { color: var(--danger); font-size: 1.4rem; font-weight: 700; line-height: 1; }
+.status-bad-text { color: var(--danger); font-weight: 600; }
+
+/* A link or span styled as a button that cannot be used. */
+.btn[aria-disabled="true"] {
+  color: var(--text-muted);
+  background: #eef1f5;
+  border-color: var(--border);
+  opacity: .8;
+  cursor: not-allowed;
+}
+
+/* ---------- Side menu groups as colored cards ---------- */
+
+.side-nav { gap: .75rem; }
+
+.side-nav-group {
+  --g-bg: #e8f0fa;
+  --g-border: #c5d8ef;
+  --g-accent: #1f5fa9;
+  padding: .55rem .5rem .5rem;
+  background: var(--g-bg);
+  border: 1px solid var(--g-border);
+  border-radius: 10px;
+}
+.side-nav-group:nth-of-type(2) { --g-bg: #e6f4ec; --g-border: #bfe0cd; --g-accent: #1c7a45; }
+.side-nav-group:nth-of-type(3) { --g-bg: #fdf3e0; --g-border: #ecd7a8; --g-accent: #8a5a00; }
+.side-nav-group:nth-of-type(4) { --g-bg: #f1eafa; --g-border: #d8c9ee; --g-accent: #6b3fa0; }
+
+.side-nav-title {
+  display: block;
+  padding: .15rem .6rem .45rem;
+  color: var(--g-accent);
+}
+
+.side-nav-group a { padding-left: .7rem; color: var(--text); }
+.side-nav-group a:hover { background: rgba(255, 255, 255, .7); color: var(--g-accent); }
+.side-nav-group a[aria-current="page"] {
+  background: #fff;
+  color: var(--g-accent);
+  font-weight: 650;
+  box-shadow: inset 3px 0 0 var(--g-accent), 0 1px 2px rgba(22, 32, 44, .08);
+}
+
+/* A line under each group's header, in the group's own color. */
+.side-nav-title {
+  margin: 0 .3rem .4rem;
+  padding: .15rem .3rem .45rem;
+  border-bottom: 1px solid var(--g-border);
+}
+
+/* A short warning line under a page heading. */
+.notice {
+  margin: .2rem 0 0;
+  padding: .45rem .7rem;
+  font-size: .9rem;
+  color: var(--warning);
+  background: var(--warning-soft);
+  border: 1px solid #e8cd94;
+  border-radius: var(--radius);
+}
+
+.sidebar-name { display: block; padding: 0 .2rem; color: var(--text); overflow-wrap: anywhere; }
+
+/* Hour and minute selects: a 24-hour time without the browser's AM/PM clock. */
+.time-24 { display: flex; align-items: center; gap: .4rem; }
+.time-24 select { width: auto; min-width: 4.5rem; }

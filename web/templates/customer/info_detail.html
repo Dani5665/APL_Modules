@@ -1,0 +1,214 @@
+{{define "content"}}
+<div class="page-head">
+  <div>
+    <h1>{{.Customer.Name}}</h1>
+    <p class="muted">Клиентски номер <span class="mono">{{.Customer.Code}}</span></p>
+  </div>
+  <a class="btn" href="/info">← Всички клиенти</a>
+</div>
+
+<div class="card">
+  <h2 class="card-title">Информация за клиента</h2>
+  <dl class="details">
+    <dt>Клиентски номер</dt>
+    <dd class="copy-row"><span class="mono">{{dash .Customer.Code}}</span>{{template "copy_btn" .Customer.Code}}</dd>
+    <dt>Име на клиента</dt>
+    <dd class="copy-row"><span>{{dash .Customer.Name}}</span>{{template "copy_btn" .Customer.Name}}</dd>
+    <dt>Обслужващ обект</dt>
+    <dd class="copy-row"><span>{{dash .Customer.Mandant}}</span>{{template "copy_btn" .Customer.Mandant}}</dd>
+    <dt>Адрес</dt>
+    <dd class="copy-row"><span>{{dash .Customer.Address}}</span>{{template "copy_btn" .Customer.Address}}</dd>
+    <dt>Телефон</dt>
+    <dd class="copy-row"><span>{{dash .Customer.Phone}}</span>{{template "copy_btn" .Customer.Phone}}</dd>
+    <dt>Отговорно лице</dt>
+    <dd class="copy-row"><span>{{dash .Customer.AccountablePerson}}</span>{{template "copy_btn" .Customer.AccountablePerson}}</dd>
+  </dl>
+  <p class="sr-only" role="status" aria-live="polite" id="copy-status"></p>
+</div>
+
+<div class="card">
+  <h2 class="card-title">Профили в NEXT</h2>
+  {{if .ProfilesUnavailable}}
+  <div class="alert alert-error" role="alert">
+    Профилите не могат да бъдат заредени в момента. Опитайте отново по-късно.
+  </div>
+  {{else if .Profiles}}
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th scope="col">Потребител</th>
+          <th scope="col">Парола</th>
+          <th scope="col">Обслужващ обект</th>
+          <th scope="col">Последен вход</th>
+          <th scope="col">Статус</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{range .Profiles}}
+        <tr>
+          <td class="nowrap">{{.Login}}</td>
+          <td class="mono">{{dash .Password}}</td>
+          <td>{{dash .Mandant}}</td>
+          <td class="nowrap">{{dash .LastLogin}}</td>
+          <td>
+            {{if .Active}}<span class="badge badge-active">Активен</span>
+            {{else}}<span class="badge badge-expired">Неактивен</span>{{end}}
+          </td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+  </div>
+  {{else}}
+  <p class="empty">Клиентът няма създаден профил в NEXT</p>
+  {{end}}
+</div>
+
+<div class="card">
+  <h2 class="card-title">Действия</h2>
+  <div class="form-actions" style="margin-top:0">
+    <button type="button" class="btn btn-primary" data-dialog-open="profile-dialog">Нов профил в NEXT</button>
+    {{if .Profiles}}
+    <a class="btn" href="/?q={{.Customer.Code}}">Към Активация - модули</a>
+    {{else}}
+    <span class="btn" aria-disabled="true" title="Клиентът няма профил в NEXT">Към Активация - модули</span>
+    {{end}}
+  </div>
+</div>
+
+<dialog id="profile-dialog" class="modal" aria-labelledby="profile-dialog-title">
+  <div class="modal-head">
+    <h2 id="profile-dialog-title">Заявка за профил в NEXT</h2>
+    <button type="button" class="btn btn-small" data-dialog-close aria-label="Затвори">✕</button>
+  </div>
+  {{template "profile_form" .Form}}
+</dialog>
+{{end}}
+
+{{/* A button that copies its data-copy value; disabled when there is nothing
+     to copy. Handled by app.js. */}}
+{{define "copy_btn"}}<button type="button" class="copy-btn" data-copy="{{.}}" {{if not .}}disabled{{end}}
+        aria-label="Копирай" title="Копирай">
+  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"
+       stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+    <rect x="9" y="9" width="11" height="11" rx="2"></rect>
+    <path d="M5 15V6a2 2 0 0 1 2-2h9"></path>
+  </svg>
+</button>{{end}}
+
+{{/* The request form. Swapped as a whole by htmx, so it carries its own state. */}}
+{{define "profile_form"}}
+<div id="profile-form-wrap">
+  {{template "errors" .Errors}}
+
+  <form hx-post="/info/{{.Customer.Code}}/profile-request"
+        hx-target="#profile-form-wrap"
+        hx-swap="outerHTML"
+        hx-disabled-elt="#profile-submit"
+        autocomplete="off">
+    <input type="hidden" name="csrf_token" value="{{.CSRF}}">
+
+    <div class="form-row">
+      <div class="field">
+        <label for="pf-code">Клиентски номер</label>
+        <input type="text" id="pf-code" value="{{.Customer.Code}}" readonly>
+      </div>
+      <div class="field">
+        <label for="pf-name">Име на клиента</label>
+        <input type="text" id="pf-name" value="{{.Customer.Name}}" readonly>
+      </div>
+    </div>
+
+    <div class="field">
+      <label for="pf-store">Обслужващ обект</label>
+      <select id="pf-store" name="store" required>
+        <option value="">— изберете —</option>
+        {{range .Stores}}
+        <option value="{{.ID}}" {{if eq $.Submitted.StoreID .ID}}selected{{end}}>{{.Name}}</option>
+        {{end}}
+      </select>
+    </div>
+
+    <div class="form-row">
+      <div class="field">
+        <label for="pf-username">Потребителско име</label>
+        <div class="input-status">
+          <input type="text" id="pf-username" name="username" value="{{.Submitted.Username}}"
+                 required minlength="5" maxlength="20" pattern="[A-Za-z0-9]{5,20}"
+                 autocomplete="off" autocapitalize="none" spellcheck="false"
+                 hx-get="/info/username-check" hx-trigger="blur"
+                 hx-target="#username-status" hx-swap="innerHTML"
+                 data-clears="username-status">
+          <span id="username-status" class="field-status" role="status" aria-live="polite"></span>
+        </div>
+        <p class="hint">5–20 символа, само латински букви и цифри.</p>
+      </div>
+      <div class="field">
+        <label for="pf-password">Парола</label>
+        <input type="text" id="pf-password" name="password" value="{{.Submitted.Password}}"
+               required minlength="5" maxlength="15" pattern="[A-Za-z0-9]{5,15}"
+               autocomplete="off" autocapitalize="none" spellcheck="false">
+        <p class="hint">5–15 символа, само латински букви и цифри.</p>
+      </div>
+    </div>
+
+    <div class="field">
+      <label for="pf-transport">Транспорт</label>
+      {{if .Transports}}
+      <select id="pf-transport" name="transport" required>
+        <option value="">— изберете —</option>
+        {{range .Transports}}
+        <option value="{{.}}" {{if eq $.Submitted.Transport .}}selected{{end}}>{{.}}</option>
+        {{end}}
+      </select>
+      {{else}}
+      <select id="pf-transport" disabled><option>Няма налични опции</option></select>
+      {{if .TransportsUnavailable}}<p class="hint">Опциите за транспорт не могат да бъдат заредени в момента.</p>{{end}}
+      {{end}}
+    </div>
+
+    <div class="form-row">
+      <div class="field">
+        <label for="pf-sender">Изпратил заявката</label>
+        <input type="text" id="pf-sender" value="{{.SubmitterName}}" readonly>
+      </div>
+      <div class="field">
+        <span class="label">Обекти на подателя</span>
+        {{if .SubmitterStoreNames}}
+        <ul class="plain-list">{{range .SubmitterStoreNames}}<li>{{.}}</li>{{end}}</ul>
+        {{else}}
+        <p class="muted">—</p>
+        {{end}}
+      </div>
+    </div>
+
+    <div class="field">
+      <label for="pf-comment">Коментар</label>
+      <textarea id="pf-comment" name="comment" maxlength="150" rows="3">{{.Submitted.Comment}}</textarea>
+      <p class="hint">Най-много 150 символа.</p>
+    </div>
+
+    <div class="form-actions">
+      <button type="submit" id="profile-submit" class="btn btn-primary">Изпрати заявката</button>
+      <button type="button" class="btn" data-dialog-close>Отказ</button>
+      <span class="htmx-indicator hint">Изпращане…</span>
+    </div>
+  </form>
+</div>
+{{end}}
+
+{{define "profile_success"}}
+<div id="profile-form-wrap" data-done>
+  <div class="alert alert-success" role="status">
+    <strong>Заявката е изпратена.</strong>
+    Заявка за профил „{{.Username}}“ за {{.ClientName}} беше приета.
+  </div>
+  <div class="form-actions">
+    <button type="button" class="btn" data-dialog-close>Затвори</button>
+  </div>
+</div>
+{{end}}
+
+{{/* Shown beside the username field after it loses focus. */}}
+{{define "username_status"}}{{if eq .State "free"}}<span class="status-ok" role="img" aria-label="Потребителското име е свободно">✓</span>{{else if eq .State "taken"}}<span class="status-bad" role="img" aria-label="Потребителското име е заето">✗</span><span class="status-bad-text">Вече съществува потребител с това име</span>{{else if eq .State "invalid"}}<span class="status-bad-text">Само латински букви и цифри, 5–20 символа</span>{{else}}<span class="muted">Проверката не е възможна в момента</span>{{end}}{{end}}

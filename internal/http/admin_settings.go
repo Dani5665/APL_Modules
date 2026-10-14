@@ -18,7 +18,6 @@ type smtpView struct {
 	view
 	Settings          email.Settings
 	SecurityOptions   []email.Security
-	RecipientsRaw     string
 	HasStoredPassword bool
 	Errors            []string
 	TestAddress       string
@@ -46,7 +45,6 @@ func (a *App) renderSMTP(w http.ResponseWriter, r *http.Request, errs []string, 
 		view:              a.newView(r, "SMTP настройки", "smtp"),
 		Settings:          s,
 		SecurityOptions:   email.SecurityOptions,
-		RecipientsRaw:     strings.Join(s.NotifyRecipients, "\n"),
 		HasStoredPassword: sealed != "",
 		Errors:            errs,
 		TestAddress:       testAddress,
@@ -71,7 +69,6 @@ func (a *App) handleAdminSMTPSave(w http.ResponseWriter, r *http.Request) {
 	password := r.PostFormValue("password")
 	fromAddress := strings.TrimSpace(r.PostFormValue("from_address"))
 	fromName := strings.TrimSpace(r.PostFormValue("from_name"))
-	recipientsRaw := r.PostFormValue("notify_recipients")
 
 	var errs []string
 
@@ -91,24 +88,18 @@ func (a *App) handleAdminSMTPSave(w http.ResponseWriter, r *http.Request) {
 		errs = append(errs, "Въведете валиден адрес на подателя.")
 	}
 
-	recipients, invalid := auth.NormalizeEmailList(recipientsRaw)
-	if len(invalid) > 0 {
-		errs = append(errs, "Невалидни адреси за известия: "+strings.Join(invalid, ", "))
-	}
-
 	if len(errs) > 0 {
 		a.renderSMTP(w, r, errs, "", "", http.StatusUnprocessableEntity)
 		return
 	}
 
 	values := map[string]string{
-		store.KeySMTPHost:         host,
-		store.KeySMTPPort:         strconv.Itoa(port),
-		store.KeySMTPSecurity:     string(security),
-		store.KeySMTPUsername:     username,
-		store.KeySMTPFromAddress:  fromAddress,
-		store.KeySMTPFromName:     fromName,
-		store.KeyNotifyRecipients: strings.Join(recipients, ", "),
+		store.KeySMTPHost:        host,
+		store.KeySMTPPort:        strconv.Itoa(port),
+		store.KeySMTPSecurity:    string(security),
+		store.KeySMTPUsername:    username,
+		store.KeySMTPFromAddress: fromAddress,
+		store.KeySMTPFromName:    fromName,
 	}
 
 	// An empty password field means "leave the stored password unchanged",
@@ -129,12 +120,11 @@ func (a *App) handleAdminSMTPSave(w http.ResponseWriter, r *http.Request) {
 
 	a.Audit.Record(ctx, audit.AdminActor(admin.ID, admin.Email), audit.SMTPUpdated,
 		host, a.clientIP(r), map[string]any{
-			"port":              port,
-			"security":          string(security),
-			"username_set":      username != "",
-			"password_changed":  password != "",
-			"from_address":      fromAddress,
-			"notify_recipients": recipients,
+			"port":             port,
+			"security":         string(security),
+			"username_set":     username != "",
+			"password_changed": password != "",
+			"from_address":     fromAddress,
 		})
 	redirectWithFlash(w, r, "/admin/settings/smtp", "smtp_saved")
 }
@@ -227,6 +217,9 @@ type templateEditView struct {
 	Warnings     []string
 	Errors       []string
 	IsCustom     bool
+	// RecipientsRaw is the assigned addresses, one per line; only used when
+	// the template's recipients are assignable.
+	RecipientsRaw string
 }
 
 func (a *App) handleAdminTemplateEdit(w http.ResponseWriter, r *http.Request) {
@@ -259,11 +252,12 @@ func (a *App) loadTemplateEdit(w http.ResponseWriter, r *http.Request) (template
 	}
 
 	v = templateEditView{
-		view:         a.newView(r, def.Label, "templates"),
-		Def:          def,
-		Template:     *t,
-		Placeholders: email.PlaceholdersFor(key),
-		IsCustom:     t.Subject != def.DefaultSubject || t.BodyHTML != def.DefaultBodyHTML,
+		view:          a.newView(r, def.Label, "templates"),
+		Def:           def,
+		Template:      *t,
+		Placeholders:  email.PlaceholdersFor(key),
+		IsCustom:      t.Subject != def.DefaultSubject || t.BodyHTML != def.DefaultBodyHTML,
+		RecipientsRaw: strings.Join(t.RecipientList(), "\n"),
 	}
 	return v, true
 }
@@ -281,6 +275,7 @@ func (a *App) handleAdminTemplateSave(w http.ResponseWriter, r *http.Request) {
 
 	subject := strings.TrimSpace(r.PostFormValue("subject"))
 	body := r.PostFormValue("body_html")
+	recipientsRaw := r.PostFormValue("recipients")
 
 	var errs []string
 	if subject == "" {
@@ -290,12 +285,26 @@ func (a *App) handleAdminTemplateSave(w http.ResponseWriter, r *http.Request) {
 		errs = append(errs, "Въведете съдържание на имейла.")
 	}
 
+	// Only a template that is not sent back to the submitter has recipients.
+	var recipients []string
+	if def.AssignRecipients {
+		var invalid []string
+		recipients, invalid = auth.NormalizeEmailList(recipientsRaw)
+		if len(invalid) > 0 {
+			errs = append(errs, "Невалидни адреси на получатели: "+strings.Join(invalid, ", "))
+		}
+	}
+
 	if len(errs) > 0 {
 		v, ok := a.loadTemplateEdit(w, r)
 		if !ok {
 			return
 		}
 		v.Template.Subject, v.Template.BodyHTML = subject, body
+		if def.AssignRecipients {
+			v.RecipientsRaw = recipientsRaw
+			v.Template.CCSubmitter = def.AllowCCSubmitter && checkboxValue(r, "cc_submitter")
+		}
 		v.Errors = errs
 		if err := a.render.render(w, http.StatusUnprocessableEntity, LayoutAdmin, "admin/template_edit", v); err != nil {
 			a.serverError(w, r, err)
@@ -307,9 +316,26 @@ func (a *App) handleAdminTemplateSave(w http.ResponseWriter, r *http.Request) {
 		a.serverError(w, r, err)
 		return
 	}
+	if def.AssignRecipients {
+		if err := a.DB.SetTemplateRecipients(ctx, key, strings.Join(recipients, ", "), dates.NowUTC()); err != nil {
+			a.serverError(w, r, err)
+			return
+		}
+	}
+	ccSubmitter := def.AllowCCSubmitter && checkboxValue(r, "cc_submitter")
+	if def.AllowCCSubmitter {
+		if err := a.DB.SetTemplateCCSubmitter(ctx, key, ccSubmitter, dates.NowUTC()); err != nil {
+			a.serverError(w, r, err)
+			return
+		}
+	}
 
+	var details map[string]any
+	if def.AssignRecipients {
+		details = map[string]any{"recipients": recipients, "cc_submitter": ccSubmitter}
+	}
 	a.Audit.Record(ctx, audit.AdminActor(admin.ID, admin.Email), audit.TemplateUpdated,
-		key, a.clientIP(r), nil)
+		key, a.clientIP(r), details)
 
 	// An unknown placeholder is not an error: it is left untouched in the
 	// body, so the admin is warned rather than blocked.
@@ -383,12 +409,15 @@ func (a *App) handleAdminTemplateRestore(w http.ResponseWriter, r *http.Request)
 
 type scheduleView struct {
 	view
-	Schedule      *store.ExportSchedule
-	RecipientsRaw string
-	NextRunAt     string
-	LastRunAt     string
-	Errors        []string
-	SendError     string
+	Schedule *store.ExportSchedule
+	// Recipients are the addresses of the export template; they are set there.
+	Recipients []string
+	// Hour and Minute are the schedule time split for the 24-hour selects.
+	Hour, Minute int
+	NextRunAt    string
+	LastRunAt    string
+	Errors       []string
+	SendError    string
 }
 
 func (a *App) handleAdminSchedule(w http.ResponseWriter, r *http.Request) {
@@ -403,13 +432,21 @@ func (a *App) renderSchedule(w http.ResponseWriter, r *http.Request, errs []stri
 		a.serverError(w, r, err)
 		return
 	}
+	recipients, err := a.templateRecipients(ctx, email.TemplateScheduledExport)
+	if err != nil {
+		a.serverError(w, r, err)
+		return
+	}
 
 	v := scheduleView{
-		view:          a.newView(r, "График на справката", "schedule"),
-		Schedule:      s,
-		RecipientsRaw: strings.Join(s.RecipientList(), "\n"),
-		Errors:        errs,
-		SendError:     sendErr,
+		view:       a.newView(r, "График на справката", "schedule"),
+		Schedule:   s,
+		Recipients: recipients,
+		Errors:     errs,
+		SendError:  sendErr,
+	}
+	if h, m, err := scheduler.ParseHHMM(s.TimeHHMM); err == nil {
+		v.Hour, v.Minute = h, m
 	}
 	if s.NextRunAt.Valid {
 		v.NextRunAt = dates.DisplayTimestamp(s.NextRunAt.String)
@@ -430,7 +467,10 @@ func (a *App) handleAdminScheduleSave(w http.ResponseWriter, r *http.Request) {
 	enabled := checkboxValue(r, "enabled")
 	day, dayErr := strconv.Atoi(strings.TrimSpace(r.PostFormValue("day_of_month")))
 	hhmm := strings.TrimSpace(r.PostFormValue("time_hhmm"))
-	recipientsRaw := r.PostFormValue("recipients")
+	// The form posts the hour and the minute from two 24-hour selects.
+	if hour, minute := strings.TrimSpace(r.PostFormValue("hour")), strings.TrimSpace(r.PostFormValue("minute")); hour != "" || minute != "" {
+		hhmm = hour + ":" + minute
+	}
 	groupByClient := checkboxValue(r, "group_by_client")
 
 	var errs []string
@@ -440,14 +480,14 @@ func (a *App) handleAdminScheduleSave(w http.ResponseWriter, r *http.Request) {
 	if _, _, err := scheduler.ParseHHMM(hhmm); err != nil {
 		errs = append(errs, "Въведете час във формат ЧЧ:ММ.")
 	}
-	recipients, invalid := auth.NormalizeEmailList(recipientsRaw)
-	if len(invalid) > 0 {
-		errs = append(errs, "Невалидни адреси: "+strings.Join(invalid, ", "))
+	recipients, rerr := a.templateRecipients(ctx, email.TemplateScheduledExport)
+	if rerr != nil {
+		a.serverError(w, r, rerr)
+		return
 	}
 	if enabled && len(recipients) == 0 {
-		errs = append(errs, "Добавете поне един получател, за да включите графика.")
+		errs = append(errs, "Задайте получатели в шаблона „Месечна справка“, за да включите графика.")
 	}
-
 	if len(errs) > 0 {
 		a.renderSchedule(w, r, errs, "", http.StatusUnprocessableEntity)
 		return
@@ -461,7 +501,7 @@ func (a *App) handleAdminScheduleSave(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := a.DB.SaveExportSchedule(ctx, enabled, day, hhmm, strings.Join(recipients, ", "), groupByClient, next); err != nil {
+	if err := a.DB.SaveExportSchedule(ctx, enabled, day, hhmm, groupByClient, next); err != nil {
 		a.serverError(w, r, err)
 		return
 	}
