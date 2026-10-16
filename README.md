@@ -328,64 +328,13 @@ The store-wide client list is cached for `CLIENT_LIST_CACHE_TTL` (default
 5 minutes). Per-client data used on the request form is cached for at most
 60 seconds, so an external change shows up quickly.
 
-### Confirmed schema
-
-All four queries are confirmed against production and are what
-`internal/external/mssql/queries.go` uses. They read a single view,
-`[STORE_IT_APL_PROD].[dbo].[V_CATALOG_USERS]`, which carries more than the
-`CATALOG_USERS` table named in the original specification:
-
-| Column | Meaning |
-|---|---|
-| `LOGIN` | a username — the salesperson's for `IS_WHO_SALER = 1`, one of a client's own for `IS_WHO_SALER = 0` |
-| `CUSTOMER_NUMBER` | the 9-digit client code (client rows only) |
-| `CUSTOMER_NAME` | the client's name (client rows only) |
-| `MANDANT_NAME` | the **store** the row belongs to, for both salesperson and client rows |
-| `IS_WHO_SALER` | `1` for a salesperson row, `0` for a client's own username |
-| `ACTIVE` | `1` for a currently active row — every query here filters to `ACTIVE = 1` |
-
-**`MANDANT_NAME` is the store, not the client's name**, despite its name and
-despite what the original specification assumed — this was established by
-testing against production (`YordanVuchkov` → store `Магазин Лозен`; client
-`000000329` → store `Варна Склад`). See `DECISIONS.md` for how.
-
-```sql
--- A salesperson's store, for GetSaler.
-SELECT TOP (1) [LOGIN], [MANDANT_NAME]
-FROM [STORE_IT_APL_PROD].[dbo].[V_CATALOG_USERS]
-WHERE [LOGIN] = @p1 AND [IS_WHO_SALER] = 1 AND [ACTIVE] = 1
-
--- A client's name and store by its 9-digit code, for GetClientByCode.
-SELECT TOP (1) [CUSTOMER_NUMBER], [CUSTOMER_NAME], [MANDANT_NAME]
-FROM [STORE_IT_APL_PROD].[dbo].[V_CATALOG_USERS]
-WHERE [CUSTOMER_NUMBER] = @p1 AND [IS_WHO_SALER] = 0 AND [ACTIVE] = 1
-
--- A client's own usernames, for ListClientLogins.
-SELECT [LOGIN]
-FROM [STORE_IT_APL_PROD].[dbo].[V_CATALOG_USERS]
-WHERE [CUSTOMER_NUMBER] = @p1 AND [IS_WHO_SALER] = 0 AND [ACTIVE] = 1
-ORDER BY [LOGIN]
-
--- Every client of a set of stores, for ListClientsByStores.
-SELECT [CUSTOMER_NUMBER], [CUSTOMER_NAME], [MANDANT_NAME], [MANDANT_ID]
-FROM [STORE_IT_APL_PROD].[dbo].[V_CATALOG_USERS]
-WHERE [IS_WHO_SALER] = 0 AND [ACTIVE] = 1 AND [MANDANT_ID] IN (...) -- grouped per client
-ORDER BY [CUSTOMER_NAME], [CUSTOMER_NUMBER]
-```
-
-The view has no column of its own for the client's "Обект" (object) — by the
-project owner's confirmation, `MANDANT_NAME` is what the business considers a
-client's object as well as their store, so `Client.Object` is set equal to
-`Client.Store` after each of the queries above.
-
 ---
 
 ## Placeholders — all resolved
 
 The original specification left four things open (PLACEHOLDER-A through -D).
 All four are now resolved; nothing is left pending. See `DECISIONS.md` for how
-each one was settled, and the note above for -B and -C (the external queries).
--A (the entry link) no longer exists - the app is standalone - and -D
+each one was settled. PLACEHOLDER-A (the entry link) no longer exists - the app is standalone - and -D
 (standalone client records) turned out not to be needed: the one thing this
 application must remember per client — whether its single test period is
 used — is already derived from `client_code` on the `requests` table
