@@ -1,6 +1,7 @@
 package http
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"strconv"
@@ -38,17 +39,9 @@ func validLatinAlnum(s string, min, max int) bool {
 	return true
 }
 
-// storeOption is one entry of the serving-store dropdown.
-type storeOption struct {
-	ID       int64
-	Name     string
-	Selected bool
-}
-
 // profileSubmission is what the user typed, carried back when the form is
 // rejected.
 type profileSubmission struct {
-	StoreID   int64
 	Username  string
 	Password  string
 	Transport string
@@ -59,7 +52,8 @@ type profileSubmission struct {
 type profileFormView struct {
 	CSRF     string
 	Customer external.Customer
-	Stores   []storeOption
+	// StoreName is the customer's serving store; it is fixed, not chosen.
+	StoreName string
 	// Transports are the options of the customer's serving store; none means
 	// the field is not applicable.
 	Transports      []string
@@ -73,42 +67,25 @@ type profileFormView struct {
 	TransportsUnavailable bool
 }
 
-// buildProfileForm gathers what the form offers: the stores to choose from
-// (the one matching the customer's serving store preselected), the transports
-// of that store, and the sender's details.
+// buildProfileForm gathers what the form offers: the customer's serving store
+// (fixed), the transports of that store, and the sender's details.
 func (a *App) buildProfileForm(r *http.Request, customer external.Customer) (profileFormView, error) {
 	ctx := r.Context()
 	u := userFrom(ctx)
 
-	f := profileFormView{CSRF: csrfFrom(ctx), Customer: customer}
+	f := profileFormView{CSRF: csrfFrom(ctx), Customer: customer, StoreName: strings.TrimSpace(customer.Mandant)}
 
 	stores, err := a.DB.ListStores(ctx, false)
 	if err != nil {
 		return f, err
 	}
 
-	// The customer's serving store (its MANDANT_NAME) is one of the stores
-	// kept here; that record supplies the MANDANT_ID the transports are
-	// looked up by, and the entry preselected in the dropdown.
-	want := strings.ToLower(strings.TrimSpace(customer.Mandant))
-	mandantID := ""
+	// The serving store (its MANDANT_NAME) is one of the stores kept here; that
+	// record supplies the MANDANT_ID the transports are looked up by.
 	for _, s := range stores {
-		sel := want != "" && strings.ToLower(strings.TrimSpace(s.Name)) == want
-		if sel {
-			mandantID = s.MandantID
-			f.Submitted.StoreID = s.ID
-		}
-		if s.Active {
-			f.Stores = append(f.Stores, storeOption{ID: s.ID, Name: s.Name, Selected: sel})
-		}
-	}
-
-	if mandantID != "" {
-		f.Transports, err = a.Directory.ListTransports(ctx, mandantID)
-		if err != nil {
-			a.Log.Error("transports could not be loaded from the external directory",
-				"client_code", customer.Code, "mandant_id", mandantID, "error", err)
-			f.TransportsUnavailable = true
+		if f.StoreName != "" && strings.EqualFold(strings.TrimSpace(s.Name), f.StoreName) && s.MandantID != "" {
+			f.Transports, f.TransportsUnavailable = a.transportsByMandant(ctx, s.MandantID)
+			break
 		}
 	}
 
@@ -123,6 +100,18 @@ func (a *App) buildProfileForm(r *http.Request, customer external.Customer) (pro
 	f.SubmitterStores = strings.Join(names, ", ")
 	f.SubmitterStoreNames = names
 	return f, nil
+}
+
+// transportsByMandant reads the transport options of a store from the external
+// directory. unavailable is set when they could not be read.
+func (a *App) transportsByMandant(ctx context.Context, mandantID string) (transports []string, unavailable bool) {
+	transports, err := a.Directory.ListTransports(ctx, mandantID)
+	if err != nil {
+		a.Log.Error("transports could not be loaded from the external directory",
+			"mandant_id", mandantID, "error", err)
+		return nil, true
+	}
+	return transports, false
 }
 
 // handleProfileRequest validates and stores a request for a new NEXT profile
@@ -153,9 +142,7 @@ func (a *App) handleProfileRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	storeID, _ := strconv.ParseInt(r.PostFormValue("store"), 10, 64)
 	sub := profileSubmission{
-		StoreID:   storeID,
 		Username:  strings.TrimSpace(r.PostFormValue("username")),
 		Password:  r.PostFormValue("password"),
 		Transport: strings.TrimSpace(r.PostFormValue("transport")),
@@ -164,14 +151,10 @@ func (a *App) handleProfileRequest(w http.ResponseWriter, r *http.Request) {
 
 	var errs []string
 
-	storeName := ""
-	for _, s := range form.Stores {
-		if s.ID == sub.StoreID {
-			storeName = s.Name
-		}
-	}
+	// The serving store is the customer's own, never taken from the form.
+	storeName := form.StoreName
 	if storeName == "" {
-		errs = append(errs, "Изберете обслужващ обект.")
+		errs = append(errs, "Клиентът няма обслужващ обект.")
 	}
 
 	validName := validLatinAlnum(sub.Username, usernameMin, usernameMax)

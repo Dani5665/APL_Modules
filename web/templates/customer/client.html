@@ -113,6 +113,7 @@
         data-test-period-used="{{.TestPeriodUsed}}"
         data-test-period="{{.Submitted.TestPeriod}}"
         data-fast-calculator="{{.Submitted.FastCalculator}}"
+        data-service-data="{{.Submitted.ServiceData}}"
         data-haynes-pro="{{.Submitted.HaynesPro}}"
         data-tier="{{.Submitted.HaynesProTier}}"
         data-months="{{.Submitted.Months}}">
@@ -123,6 +124,7 @@
          mirrored here. The server re-applies every rule regardless. */}}
     <input type="hidden" name="test_period" :value="testPeriodValue">
     <input type="hidden" name="module_fast_calculator" :value="fastCalculatorValue">
+    <input type="hidden" name="module_servicedata" :value="serviceDataValue">
     <input type="hidden" name="module_haynespro" :value="haynesProValue">
     <input type="hidden" name="haynespro_tier" :value="tierValue">
     <input type="hidden" name="months" :value="monthsValue">
@@ -196,17 +198,26 @@
       </div>
 
       <div class="check">
+        <input type="checkbox" id="module_sd_box"
+               x-model="serviceData" :disabled="serviceDataLocked">
+        <label for="module_sd_box">Servicedata</label>
+      </div>
+      <p class="hint" x-show="serviceDataIncluded">
+        Servicedata е включен в Business и Ultimate пакетите на HaynesPro.
+      </p>
+
+      <div class="check">
         <input type="checkbox" id="module_hp_box"
-               x-model="haynesPro" :disabled="locked">
+               x-model="haynesPro" @change="syncServiceData" :disabled="locked">
         <label for="module_hp_box">HaynesPro</label>
       </div>
 
       <div class="field" x-show="showTier">
         <label for="haynespro_tier_select">Ниво на HaynesPro</label>
-        <select id="haynespro_tier_select" x-model="tier" :disabled="locked">
+        <select id="haynespro_tier_select" x-model="tier" @change="syncServiceData" :disabled="locked">
+          <option value="PRO">Professional</option>
           <option value="BUSINESS">Business</option>
-          <option value="PRO">Pro</option>
-          <option value="ULTRA">Ultra</option>
+          <option value="ULTRA">Ultimate</option>
         </select>
       </div>
     </fieldset>

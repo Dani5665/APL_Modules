@@ -83,8 +83,8 @@ func TestProfileFormIsPrefilled(t *testing.T) {
 	assertStatus(t, rec, http.StatusOK)
 	assertContains(t, rec,
 		`value="`+client.Code+`" readonly`, `value="`+client.Name+`" readonly`,
-		// the customer's own store is preselected
-		`value="`+strconv.FormatInt(sofia, 10)+`" selected`,
+		// the customer's own store is fixed
+		`id="pf-store" value="`+mock.StoreSofia+`" readonly`,
 		// transports of that store
 		"Куриер Спиди", "Лична доставка",
 		// the sender
@@ -143,6 +143,8 @@ func TestProfileRequestIsStoredAndEmailed(t *testing.T) {
 	form := profileForm(sofia)
 	// The posted number and name are ignored: they come from the directory.
 	form.Set("client_code", "999999999")
+	// So is the serving store: a posted one is ignored.
+	form.Set("store", "99999")
 	rec := s.post("/info/"+client.Code+"/profile-request", form)
 	assertStatus(t, rec, http.StatusOK)
 	assertContains(t, rec, "Заявката е изпратена.", "newuser01")
@@ -206,8 +208,6 @@ func TestProfileRequestValidation(t *testing.T) {
 		{"short password", func(v url.Values) { v.Set("password", "abcd") }, "между 5 и 15"},
 		{"long password", func(v url.Values) { v.Set("password", strings.Repeat("a", 16)) }, "между 5 и 15"},
 		{"password with a symbol", func(v url.Values) { v.Set("password", "pass word") }, "между 5 и 15"},
-		{"no store", func(v url.Values) { v.Set("store", "") }, "обслужващ обект"},
-		{"unknown store", func(v url.Values) { v.Set("store", "99999") }, "обслужващ обект"},
 		{"unknown transport", func(v url.Values) { v.Set("transport", "Хеликоптер") }, "Изберете транспорт"},
 		{"long comment", func(v url.Values) { v.Set("comment", strings.Repeat("я", 151)) }, "150 символа"},
 	}

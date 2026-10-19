@@ -11,6 +11,7 @@ document.addEventListener('alpine:init', () => {
   Alpine.data('requestForm', () => ({
     testPeriod: false,
     fastCalculator: false,
+    serviceData: false,
     haynesPro: false,
     tier: 'BUSINESS',
     months: '1',
@@ -26,12 +27,27 @@ document.addEventListener('alpine:init', () => {
       this.testPeriodUsed = d.testPeriodUsed === 'true';
       this.testPeriod = d.testPeriod === 'true';
       this.fastCalculator = d.fastCalculator === 'true';
+      this.serviceData = d.serviceData === 'true';
       this.haynesPro = d.haynesPro === 'true';
       this.tier = d.tier || 'BUSINESS';
       this.months = d.months || '1';
       if (this.testPeriod) {
         this.applyTestPeriod();
       }
+      this.syncServiceData();
+    },
+
+    /* Business and Ultimate already include Servicedata, so its box is
+     * unchecked and locked while one of them is selected. */
+    get serviceDataIncluded() {
+      const tier = this.testPeriod ? 'BUSINESS' : this.tier;
+      return (this.testPeriod || this.haynesPro) && (tier === 'BUSINESS' || tier === 'ULTRA');
+    },
+    get serviceDataLocked() {
+      return this.locked || this.serviceDataIncluded;
+    },
+    syncServiceData() {
+      if (this.serviceDataIncluded) this.serviceData = false;
     },
 
     /* locked is true while a test period fixes the module selection. */
@@ -44,6 +60,9 @@ document.addEventListener('alpine:init', () => {
      * these rules regardless of what arrives. */
     get fastCalculatorValue() {
       return (this.testPeriod || this.fastCalculator) ? '1' : '';
+    },
+    get serviceDataValue() {
+      return (!this.serviceDataIncluded && this.serviceData) ? '1' : '';
     },
     get haynesProValue() {
       return (this.testPeriod || this.haynesPro) ? '1' : '';
@@ -70,12 +89,14 @@ document.addEventListener('alpine:init', () => {
       } else {
         this.restorePrevious();
       }
+      this.syncServiceData();
     },
 
     applyTestPeriod() {
       if (this.previous === null) {
         this.previous = {
           fastCalculator: this.fastCalculator,
+          serviceData: this.serviceData,
           haynesPro: this.haynesPro,
           tier: this.tier,
           months: this.months,
@@ -90,6 +111,7 @@ document.addEventListener('alpine:init', () => {
     restorePrevious() {
       if (this.previous === null) return;
       this.fastCalculator = this.previous.fastCalculator;
+      this.serviceData = this.previous.serviceData;
       this.haynesPro = this.previous.haynesPro;
       this.tier = this.previous.tier;
       this.months = this.previous.months;

@@ -63,6 +63,7 @@
         data-test-period-used="{{.TestPeriodUsed}}"
         data-test-period="{{$r.TestPeriod}}"
         data-fast-calculator="{{range $r.Modules}}{{if eq (printf "%s" .Module) "FAST_CALCULATOR"}}true{{end}}{{end}}"
+        data-service-data="{{range $r.Modules}}{{if eq (printf "%s" .Module) "SERVICEDATA"}}true{{end}}{{end}}"
         data-haynes-pro="{{range $r.Modules}}{{if eq (printf "%s" .Module) "HAYNESPRO"}}true{{end}}{{end}}"
         data-tier="{{range $r.Modules}}{{if eq (printf "%s" .Module) "HAYNESPRO"}}{{.Tier}}{{end}}{{end}}"
         data-months="{{$r.Months}}">
@@ -70,6 +71,7 @@
     <input type="hidden" name="csrf_token" value="{{.CSRF}}">
     <input type="hidden" name="test_period" :value="testPeriodValue">
     <input type="hidden" name="module_fast_calculator" :value="fastCalculatorValue">
+    <input type="hidden" name="module_servicedata" :value="serviceDataValue">
     <input type="hidden" name="module_haynespro" :value="haynesProValue">
     <input type="hidden" name="haynespro_tier" :value="tierValue">
     <input type="hidden" name="months" :value="monthsValue">
@@ -115,16 +117,24 @@
       </div>
 
       <div class="check">
-        <input type="checkbox" id="edit_module_hp" x-model="haynesPro" :disabled="locked">
+        <input type="checkbox" id="edit_module_sd" x-model="serviceData" :disabled="serviceDataLocked">
+        <label for="edit_module_sd">Servicedata</label>
+      </div>
+      <p class="hint" x-show="serviceDataIncluded">
+        Servicedata е включен в Business и Ultimate пакетите на HaynesPro.
+      </p>
+
+      <div class="check">
+        <input type="checkbox" id="edit_module_hp" x-model="haynesPro" @change="syncServiceData" :disabled="locked">
         <label for="edit_module_hp">HaynesPro</label>
       </div>
 
       <div class="field" x-show="showTier">
         <label for="edit_tier">Ниво на HaynesPro</label>
-        <select id="edit_tier" x-model="tier" :disabled="locked">
+        <select id="edit_tier" x-model="tier" @change="syncServiceData" :disabled="locked">
+          <option value="PRO">Professional</option>
           <option value="BUSINESS">Business</option>
-          <option value="PRO">Pro</option>
-          <option value="ULTRA">Ultra</option>
+          <option value="ULTRA">Ultimate</option>
         </select>
       </div>
     </fieldset>

@@ -122,12 +122,7 @@
 
     <div class="field">
       <label for="pf-store">Обслужващ обект</label>
-      <select id="pf-store" name="store" required>
-        <option value="">— изберете —</option>
-        {{range .Stores}}
-        <option value="{{.ID}}" {{if eq $.Submitted.StoreID .ID}}selected{{end}}>{{.Name}}</option>
-        {{end}}
-      </select>
+      <input type="text" id="pf-store" value="{{.StoreName}}" readonly>
     </div>
 
     <div class="form-row">

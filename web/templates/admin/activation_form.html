@@ -60,9 +60,9 @@
         <div class="field" x-show="showTier">
           <label for="tier">Ниво</label>
           <select id="tier" name="tier">
+            <option value="PRO" {{if eq (printf "%s" $a.Tier) "PRO"}}selected{{end}}>Professional</option>
             <option value="BUSINESS" {{if eq (printf "%s" $a.Tier) "BUSINESS"}}selected{{end}}>Business</option>
-            <option value="PRO" {{if eq (printf "%s" $a.Tier) "PRO"}}selected{{end}}>Pro</option>
-            <option value="ULTRA" {{if eq (printf "%s" $a.Tier) "ULTRA"}}selected{{end}}>Ultra</option>
+            <option value="ULTRA" {{if eq (printf "%s" $a.Tier) "ULTRA"}}selected{{end}}>Ultimate</option>
           </select>
         </div>
       </div>

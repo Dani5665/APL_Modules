@@ -235,3 +235,34 @@ func TestCheckStoreAccess(t *testing.T) {
 		})
 	}
 }
+
+// Business and Ultimate include Servicedata, so it is never activated on top;
+// Professional does not include it.
+func TestServiceDataIsDroppedWhenHaynesProIncludesIt(t *testing.T) {
+	tests := []struct {
+		tier modules.Tier
+		want bool
+	}{
+		{modules.TierPro, true},
+		{modules.TierBusiness, false},
+		{modules.TierUltra, false},
+	}
+	for _, tt := range tests {
+		s := ApplyTestPeriod(Selection{ServiceData: true, HaynesPro: true, HaynesProTier: tt.tier})
+		if s.ServiceData != tt.want {
+			t.Errorf("tier %s: ServiceData = %v, want %v", tt.tier, s.ServiceData, tt.want)
+		}
+	}
+
+	// Without HaynesPro it stays, and it is a module of its own.
+	s := ApplyTestPeriod(Selection{ServiceData: true})
+	mods := s.Modules()
+	if len(mods) != 1 || mods[0].Module != modules.ServiceData || mods[0].Tier != "" {
+		t.Errorf("modules = %+v, want only Servicedata", mods)
+	}
+
+	// A test period forces Business, which includes it.
+	if ApplyTestPeriod(Selection{TestPeriod: true, ServiceData: true}).ServiceData {
+		t.Error("test period kept Servicedata")
+	}
+}

@@ -19,6 +19,7 @@ import (
 type Selection struct {
 	TestPeriod     bool
 	FastCalculator bool
+	ServiceData    bool
 	HaynesPro      bool
 	HaynesProTier  modules.Tier
 	StartDate      string
@@ -62,13 +63,17 @@ const (
 // The form disables these inputs in the browser for clarity, but the server
 // is the only place the rule is actually enforced.
 func ApplyTestPeriod(s Selection) Selection {
-	if !s.TestPeriod {
-		return s
+	if s.TestPeriod {
+		s.FastCalculator = true
+		s.HaynesPro = true
+		s.HaynesProTier = TestPeriodTier
+		s.Months = TestPeriodMonths
 	}
-	s.FastCalculator = true
-	s.HaynesPro = true
-	s.HaynesProTier = TestPeriodTier
-	s.Months = TestPeriodMonths
+	// Business and Ultimate already include Servicedata, so it is never
+	// activated on top of them.
+	if s.HaynesPro && modules.IncludesServiceData(s.HaynesProTier) {
+		s.ServiceData = false
+	}
 	return s
 }
 
@@ -78,6 +83,9 @@ func (s Selection) Modules() []store.RequestModule {
 	var out []store.RequestModule
 	if s.FastCalculator {
 		out = append(out, store.RequestModule{Module: modules.FastCalculator})
+	}
+	if s.ServiceData {
+		out = append(out, store.RequestModule{Module: modules.ServiceData})
 	}
 	if s.HaynesPro {
 		out = append(out, store.RequestModule{Module: modules.HaynesPro, Tier: s.HaynesProTier})
@@ -101,7 +109,7 @@ func ValidateInput(s Selection, availableUsernames []string, testPeriodUsed bool
 		v.Add("Тестовият период вече е използван за този клиент.")
 	}
 
-	if !s.FastCalculator && !s.HaynesPro {
+	if !s.FastCalculator && !s.ServiceData && !s.HaynesPro {
 		v.Add("Изберете поне един модул.")
 	}
 	if s.HaynesPro && !modules.ValidTier(modules.HaynesPro, s.HaynesProTier) {

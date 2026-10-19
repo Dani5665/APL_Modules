@@ -12,6 +12,7 @@ type Tier string
 
 const (
 	FastCalculator Key = "FAST_CALCULATOR"
+	ServiceData    Key = "SERVICEDATA"
 	HaynesPro      Key = "HAYNESPRO"
 )
 
@@ -45,14 +46,24 @@ var All = []Def{
 		Label: "Fast Calculator",
 	},
 	{
+		Key:   ServiceData,
+		Label: "Servicedata",
+	},
+	{
 		Key:   HaynesPro,
 		Label: "HaynesPro",
 		Tiers: []TierDef{
+			{Key: TierPro, Label: "Professional"},
 			{Key: TierBusiness, Label: "Business"},
-			{Key: TierPro, Label: "Pro"},
-			{Key: TierUltra, Label: "Ultra"},
+			{Key: TierUltra, Label: "Ultimate"},
 		},
 	},
+}
+
+// IncludesServiceData reports whether a HaynesPro tier already comes with
+// Servicedata, so that module is not activated separately.
+func IncludesServiceData(t Tier) bool {
+	return t == TierBusiness || t == TierUltra
 }
 
 var byKey = func() map[Key]Def {

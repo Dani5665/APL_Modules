@@ -473,6 +473,7 @@ func parseSelection(r *http.Request) requests.Selection {
 	return requests.Selection{
 		TestPeriod:     checkboxValue(r, "test_period"),
 		FastCalculator: checkboxValue(r, "module_fast_calculator"),
+		ServiceData:    checkboxValue(r, "module_servicedata"),
 		HaynesPro:      checkboxValue(r, "module_haynespro"),
 		HaynesProTier:  modules.Tier(strings.TrimSpace(r.PostFormValue("haynespro_tier"))),
 		StartDate:      strings.TrimSpace(r.PostFormValue("start_date")),

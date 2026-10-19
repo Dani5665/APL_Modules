@@ -84,6 +84,22 @@ func TestTransportsComeFromTheStoresMandantID(t *testing.T) {
 	assertNotContains(t, rec, "Куриер Спиди")
 }
 
+// The serving store is the customer's own and cannot be changed in the form.
+func TestServingStoreIsFixedToTheCustomers(t *testing.T) {
+	h := newHarness(t)
+	const email = "prodavach@example.com"
+	sofia := h.seedStore(mock.StoreSofia, mock.MandantSofia)
+	varna := h.seedStore(mock.StoreVarna, mock.MandantVarna)
+	h.seedUser(email, sofia, varna)
+	s := h.loginUser(email)
+
+	rec := s.get("/info/" + h.firstMockClient(mock.StoreVarna).Code)
+	assertStatus(t, rec, http.StatusOK)
+	assertContains(t, rec, `id="pf-store" value="`+mock.StoreVarna+`" readonly`)
+	assertContains(t, rec, "Куриер Еконт")
+	assertNotContains(t, rec, "Куриер Спиди")
+}
+
 func TestNoTransportsWhenTheCustomersStoreIsNotKept(t *testing.T) {
 	h := newHarness(t)
 	const email = "prodavach@example.com"

@@ -76,8 +76,8 @@ func TestBuildProducesAReadableWorkbook(t *testing.T) {
 		}
 	}
 
-	if got := rows[2][6]; got != "Ultra" {
-		t.Errorf("tier cell = %q, want %q", got, "Ultra")
+	if got := rows[2][6]; got != "Ultimate" {
+		t.Errorf("tier cell = %q, want %q", got, "Ultimate")
 	}
 }
 
@@ -172,7 +172,7 @@ func TestBuildGroupedByClient(t *testing.T) {
 		groupedHeaders,
 		{"100000001 — Автосервиз Балкан ЕООД   ·   Обект: Сервиз Люлин   ·   Магазин: Магазин София"},
 		{"office_100000001", "Fast Calculator", "", "01.09.2026", "30.11.2026", "Активен"},
-		{"office_100000001", "HaynesPro", "Ultra", "01.09.2026", "31.08.2027", "Активен"},
+		{"office_100000001", "HaynesPro", "Ultimate", "01.09.2026", "31.08.2027", "Активен"},
 		// The store equals the object here, so it is not repeated.
 		{"100000002 — Гараж Изток ООД   ·   Обект: Магазин Варна"},
 		{"garage_2", "HaynesPro", "Business", "01.09.2026", "31.12.2026", "Активен"},
