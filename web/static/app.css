@@ -453,6 +453,10 @@ th {
 }
 
 tbody tr:hover { background: #f7f9fc; }
+tbody tr.row-active,
+tbody tr.row-active:hover { background: var(--success-soft); }
+tbody tr.row-inactive,
+tbody tr.row-inactive:hover { background: #eef1f5; color: var(--text-muted); }
 
 td.numeric, th.numeric { text-align: right; font-variant-numeric: tabular-nums; }
 td.nowrap, th.nowrap { white-space: nowrap; }

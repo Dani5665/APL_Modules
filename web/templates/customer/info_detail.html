@@ -46,7 +46,7 @@
       </thead>
       <tbody>
         {{range .Profiles}}
-        <tr>
+        <tr class="{{if .Active}}row-active{{else}}row-inactive{{end}}">
           <td class="nowrap">{{.Login}}</td>
           <td class="mono">{{dash .Password}}</td>
           <td>{{dash .Mandant}}</td>
