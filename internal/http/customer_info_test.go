@@ -34,9 +34,19 @@ func TestInfoSearchListsAllCustomers(t *testing.T) {
 	sofia := h.firstMockClient(mock.StoreSofia)
 	varna := h.firstMockClient(mock.StoreVarna)
 
-	rec := s.get("/info/search")
+	// Nothing is listed until at least 3 characters are typed.
+	for _, q := range []string{"", "ав"} {
+		rec := s.get("/info/search?q=" + url.QueryEscape(q))
+		assertStatus(t, rec, http.StatusOK)
+		assertContains(t, rec, "Въведете поне 3 символа")
+		assertNotContains(t, rec, sofia.Name)
+	}
+
+	// Not limited to the user's stores: a Varna customer is found too.
+	rec := s.get("/info/search?q=бавария")
 	assertStatus(t, rec, http.StatusOK)
-	assertContains(t, rec, sofia.Name, varna.Name, "/info/"+sofia.Code)
+	assertContains(t, rec, varna.Name, "/info/"+varna.Code)
+	assertNotContains(t, rec, sofia.Name)
 
 	rec = s.get("/info/search?q=" + url.QueryEscape(strings.ToUpper(varna.Name)))
 	assertStatus(t, rec, http.StatusOK)
@@ -100,12 +110,12 @@ func TestInfoListScrollsInBatchesOf25(t *testing.T) {
 	email, _ := sofiaSetup(t, h)
 	s := h.loginUser(email)
 
-	// 20 seeded clients plus the one without a profile: 21 in all, so one
-	// batch holds everything and nothing asks for more.
-	rec := s.get("/info/search")
+	// The 20 seeded clients all have a serving store, so one batch holds
+	// everything and nothing asks for more.
+	rec := s.get("/info/search?q=" + url.QueryEscape("Магазин"))
 	assertStatus(t, rec, http.StatusOK)
-	if n := strings.Count(rec.Body.String(), `class="client-card"`); n != 21 {
-		t.Errorf("first batch has %d customers, want 21", n)
+	if n := strings.Count(rec.Body.String(), `class="client-card"`); n != 20 {
+		t.Errorf("first batch has %d customers, want 20", n)
 	}
 	assertNotContains(t, rec, `hx-trigger="revealed"`, "Показани")
 

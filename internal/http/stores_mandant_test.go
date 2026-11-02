@@ -64,13 +64,13 @@ func TestClientAccessFollowsTheMandantIDNotTheName(t *testing.T) {
 	assertStatus(t, s.get("/clients/"+varna.Code), http.StatusOK)
 
 	// And the searched list holds the clients of that MANDANT_ID.
-	rec := s.get("/clients/search")
+	rec := s.get("/clients/search?q=" + url.QueryEscape("ЕООД"))
 	assertContains(t, rec, varna.Name)
 	assertNotContains(t, rec, sofia.Name)
 }
 
-// The transport list is looked up by the MANDANT_ID of the stored store that
-// carries the customer's serving store name.
+// The transport list is looked up by the MANDANT_ID of the picked store, not by
+// its name.
 func TestTransportsComeFromTheStoresMandantID(t *testing.T) {
 	h := newHarness(t)
 	const email = "prodavach@example.com"
@@ -78,14 +78,15 @@ func TestTransportsComeFromTheStoresMandantID(t *testing.T) {
 	h.seedUser(email, sofiaName)
 	s := h.loginUser(email)
 
-	rec := s.get("/info/" + h.firstMockClient(mock.StoreSofia).Code)
+	rec := s.get("/info/transports?store=" + mock.MandantVarna)
 	assertStatus(t, rec, http.StatusOK)
 	assertContains(t, rec, "Куриер Еконт")
 	assertNotContains(t, rec, "Куриер Спиди")
 }
 
-// The serving store is the customer's own and cannot be changed in the form.
-func TestServingStoreIsFixedToTheCustomers(t *testing.T) {
+// The serving store is picked from the user's stores, whatever the customer's
+// own store is.
+func TestServingStoreIsPickedFromTheUsersStores(t *testing.T) {
 	h := newHarness(t)
 	const email = "prodavach@example.com"
 	sofia := h.seedStore(mock.StoreSofia, mock.MandantSofia)
@@ -95,22 +96,9 @@ func TestServingStoreIsFixedToTheCustomers(t *testing.T) {
 
 	rec := s.get("/info/" + h.firstMockClient(mock.StoreVarna).Code)
 	assertStatus(t, rec, http.StatusOK)
-	assertContains(t, rec, `id="pf-store" value="`+mock.StoreVarna+`" readonly`)
-	assertContains(t, rec, "Куриер Еконт")
-	assertNotContains(t, rec, "Куриер Спиди")
-}
-
-func TestNoTransportsWhenTheCustomersStoreIsNotKept(t *testing.T) {
-	h := newHarness(t)
-	const email = "prodavach@example.com"
-	other := h.seedStore(mock.StoreVarna, mock.MandantVarna)
-	h.seedUser(email, other)
-	s := h.loginUser(email)
-
-	rec := s.get("/info/" + h.firstMockClient(mock.StoreSofia).Code)
-	assertStatus(t, rec, http.StatusOK)
-	assertContains(t, rec, "Няма налични опции")
-	assertNotContains(t, rec, "Куриер")
+	assertContains(t, rec, `<option value="">— изберете —</option>`,
+		`<option value="`+mock.MandantSofia+`" >`+mock.StoreSofia+`</option>`,
+		`<option value="`+mock.MandantVarna+`" >`+mock.StoreVarna+`</option>`)
 }
 
 // Local activations are listed by the store's name (their MANDANT_NAME

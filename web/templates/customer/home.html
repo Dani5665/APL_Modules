@@ -35,29 +35,42 @@
 
 {{define "client_results"}}
 <div id="client-results">
-  {{if .Unavailable}}
+  {{if .TooShort}}
+  <p class="empty">Въведете поне 3 символа, за да се зареди списъкът с клиенти.</p>
+  {{else if .Unavailable}}
   <div class="alert alert-error" role="alert">
     Списъкът с клиенти не може да бъде зареден в момента. Опитайте отново по-късно.
   </div>
   {{else if .Clients}}
   <ul class="client-cards">
-    {{range .Clients}}
-    <li>
-      <a class="client-card" href="/clients/{{.Code}}">
-        <span class="client-card-name">{{.Name}}</span>
-        <span class="client-card-meta">
-          <span class="mono">{{.Code}}</span>
-          {{if .Object}}<span>{{.Object}}</span>{{end}}
-        </span>
-      </a>
-    </li>
-    {{end}}
+    {{template "client_more" .}}
   </ul>
-  {{template "pagination" .ClientPage}}
   {{else}}
   <p class="empty">
     {{if .Search}}Няма намерени клиенти по това търсене.{{else}}Няма клиенти за вашите магазини.{{end}}
   </p>
   {{end}}
 </div>
+{{end}}
+
+{{/* One batch of rows. While more remain, the last item loads the next batch
+     as soon as it scrolls into view, replacing itself with those rows. */}}
+{{define "client_more"}}
+{{range .Clients}}
+<li>
+  <a class="client-card" href="/clients/{{.Code}}">
+    <span class="client-card-name">{{.Name}}</span>
+    <span class="client-card-meta">
+      <span class="mono">{{.Code}}</span>
+      {{if .Object}}<span>{{.Object}}</span>{{end}}
+    </span>
+  </a>
+</li>
+{{end}}
+{{if .ClientPage.HasNext}}
+<li class="scroll-more" hx-get="/clients/search{{queryString .ClientPage.Query "page" .ClientPage.Next}}"
+    hx-trigger="revealed" hx-swap="outerHTML">
+  Зареждане…
+</li>
+{{end}}
 {{end}}

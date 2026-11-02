@@ -20,6 +20,9 @@ type infoView struct {
 	Search      string
 	LoadURL     string
 	Unavailable bool
+	// TooShort is set when the search is shorter than minSearchLen, so nothing
+	// is loaded yet.
+	TooShort bool
 }
 
 // handleInfo shows the customer information page. As on the activation page,
@@ -53,8 +56,9 @@ func (a *App) handleInfoSearch(w http.ResponseWriter, r *http.Request) {
 		Query:    map[string]string{"q": search},
 	}
 
-	all, err := a.Directory.ListCustomers(r.Context())
-	if err != nil {
+	if searchTooShort(search) {
+		v.TooShort = true
+	} else if all, err := a.Directory.ListCustomers(r.Context()); err != nil {
 		a.Log.Error("customers could not be loaded from the external directory", "error", err)
 		v.Unavailable = true
 	} else {
@@ -152,12 +156,7 @@ func (a *App) handleInfoDetail(w http.ResponseWriter, r *http.Request) {
 		v.Profiles = append(v.Profiles, row)
 	}
 
-	form, err := a.buildProfileForm(r, *customer)
-	if err != nil {
-		a.serverError(w, r, err)
-		return
-	}
-	v.Form = form
+	v.Form = a.buildProfileForm(r, *customer)
 
 	if err := a.render.render(w, http.StatusOK, LayoutCustomer, "customer/info_detail", v); err != nil {
 		a.serverError(w, r, err)

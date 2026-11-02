@@ -83,15 +83,40 @@ func TestProfileFormIsPrefilled(t *testing.T) {
 	assertStatus(t, rec, http.StatusOK)
 	assertContains(t, rec,
 		`value="`+client.Code+`" readonly`, `value="`+client.Name+`" readonly`,
-		// the customer's own store is fixed
-		`id="pf-store" value="`+mock.StoreSofia+`" readonly`,
-		// transports of that store
-		"Куриер Спиди", "Лична доставка",
+		// the serving store is picked from the sender's stores, none chosen yet
+		`id="pf-store" name="store"`, `<option value="">— изберете —</option>`,
+		`<option value="`+mock.MandantSofia+`" >`+mock.StoreSofia+`</option>`,
+		`hx-get="/info/transports"`,
+		// transports are only loaded once a store is picked
+		"Изберете обслужващ обект",
 		// the sender
 		`value="Тестов Потребител" readonly`, "Магазин София",
 		`maxlength="150"`,
 	)
+	assertNotContains(t, rec, "Куриер", mock.StoreVarna)
+}
+
+// Picking a serving store loads the transports of that store, and only for the
+// user's own stores.
+func TestTransportsLoadForThePickedStore(t *testing.T) {
+	h := newHarness(t)
+	sofia := h.seedStore(mock.StoreSofia, mock.MandantSofia)
+	h.seedStore(mock.StoreVarna, mock.MandantVarna)
+	const email = "prodavach@example.com"
+	h.seedUser(email, sofia)
+	s := h.loginUser(email)
+
+	rec := s.get("/info/transports?store=" + mock.MandantSofia)
+	assertStatus(t, rec, http.StatusOK)
+	assertContains(t, rec, "Куриер Спиди", "Лична доставка")
 	assertNotContains(t, rec, "Куриер Еконт")
+
+	for _, id := range []string{"", mock.MandantVarna} {
+		rec = s.get("/info/transports?store=" + id)
+		assertStatus(t, rec, http.StatusOK)
+		assertContains(t, rec, "Изберете обслужващ обект")
+		assertNotContains(t, rec, "Куриер")
+	}
 }
 
 func TestUsernameCheck(t *testing.T) {
@@ -118,9 +143,9 @@ func TestUsernameCheck(t *testing.T) {
 	assertStatus(t, s.get("/info/username-check?username="), http.StatusOK)
 }
 
-func profileForm(storeID int64) url.Values {
+func profileForm(mandantID string) url.Values {
 	return url.Values{
-		"store":     {strconv.FormatInt(storeID, 10)},
+		"store":     {mandantID},
 		"username":  {"newuser01"},
 		"password":  {"Secret123"},
 		"transport": {"Лична доставка"},
@@ -140,11 +165,9 @@ func TestProfileRequestIsStoredAndEmailed(t *testing.T) {
 	s := h.loginUser(email)
 	client := h.firstMockClient(mock.StoreSofia)
 
-	form := profileForm(sofia)
+	form := profileForm(mock.MandantSofia)
 	// The posted number and name are ignored: they come from the directory.
 	form.Set("client_code", "999999999")
-	// So is the serving store: a posted one is ignored.
-	form.Set("store", "99999")
 	rec := s.post("/info/"+client.Code+"/profile-request", form)
 	assertStatus(t, rec, http.StatusOK)
 	assertContains(t, rec, "Заявката е изпратена.", "newuser01")
@@ -208,12 +231,14 @@ func TestProfileRequestValidation(t *testing.T) {
 		{"short password", func(v url.Values) { v.Set("password", "abcd") }, "между 5 и 15"},
 		{"long password", func(v url.Values) { v.Set("password", strings.Repeat("a", 16)) }, "между 5 и 15"},
 		{"password with a symbol", func(v url.Values) { v.Set("password", "pass word") }, "между 5 и 15"},
+		{"no store", func(v url.Values) { v.Del("store") }, "Изберете обслужващ обект"},
+		{"a store the user does not have", func(v url.Values) { v.Set("store", mock.MandantVarna) }, "Изберете обслужващ обект"},
 		{"unknown transport", func(v url.Values) { v.Set("transport", "Хеликоптер") }, "Изберете транспорт"},
 		{"long comment", func(v url.Values) { v.Set("comment", strings.Repeat("я", 151)) }, "150 символа"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			form := profileForm(sofia)
+			form := profileForm(mock.MandantSofia)
 			tt.mutate(form)
 			rec := s.post("/info/"+client.Code+"/profile-request", form)
 			assertStatus(t, rec, http.StatusUnprocessableEntity)
@@ -227,7 +252,7 @@ func TestProfileRequestValidation(t *testing.T) {
 	}
 
 	// A comment of exactly 150 characters is fine.
-	form := profileForm(sofia)
+	form := profileForm(mock.MandantSofia)
 	form.Set("comment", strings.Repeat("я", 150))
 	assertStatus(t, s.post("/info/"+client.Code+"/profile-request", form), http.StatusOK)
 }
@@ -239,15 +264,15 @@ func TestProfileRequestNeedsLoginAndCSRFAndAKnownCustomer(t *testing.T) {
 	h.seedUser(email, sofia)
 	client := h.firstMockClient(mock.StoreSofia)
 
-	rec := h.newSession().post("/info/"+client.Code+"/profile-request", profileForm(sofia))
+	rec := h.newSession().post("/info/"+client.Code+"/profile-request", profileForm(mock.MandantSofia))
 	assertStatus(t, rec, http.StatusSeeOther)
 
 	s := h.loginUser(email)
-	form := profileForm(sofia)
+	form := profileForm(mock.MandantSofia)
 	form.Set("csrf_token", "wrong")
 	assertStatus(t, s.post("/info/"+client.Code+"/profile-request", form), http.StatusForbidden)
 
-	assertStatus(t, s.post("/info/999999998/profile-request", profileForm(sofia)), http.StatusNotFound)
+	assertStatus(t, s.post("/info/999999998/profile-request", profileForm(mock.MandantSofia)), http.StatusNotFound)
 }
 
 func TestAdminUserNameIsRequiredAndSaved(t *testing.T) {

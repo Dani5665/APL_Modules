@@ -122,7 +122,14 @@
 
     <div class="field">
       <label for="pf-store">Обслужващ обект</label>
-      <input type="text" id="pf-store" value="{{.StoreName}}" readonly>
+      <select id="pf-store" name="store" required
+              hx-get="/info/transports" hx-trigger="change"
+              hx-target="#pf-transport-field" hx-swap="innerHTML">
+        <option value="">— изберете —</option>
+        {{range .Stores}}
+        <option value="{{.MandantID}}" {{if eq $.Submitted.Store .MandantID}}selected{{end}}>{{.Name}}</option>
+        {{end}}
+      </select>
     </div>
 
     <div class="form-row">
@@ -148,19 +155,8 @@
       </div>
     </div>
 
-    <div class="field">
-      <label for="pf-transport">Транспорт</label>
-      {{if .Transports}}
-      <select id="pf-transport" name="transport" required>
-        <option value="">— изберете —</option>
-        {{range .Transports}}
-        <option value="{{.}}" {{if eq $.Submitted.Transport .}}selected{{end}}>{{.}}</option>
-        {{end}}
-      </select>
-      {{else}}
-      <select id="pf-transport" disabled><option>Няма налични опции</option></select>
-      {{if .TransportsUnavailable}}<p class="hint">Опциите за транспорт не могат да бъдат заредени в момента.</p>{{end}}
-      {{end}}
+    <div class="field" id="pf-transport-field">
+      {{template "transport_field" .TransportView}}
     </div>
 
     <div class="form-row">
@@ -207,3 +203,19 @@
 
 {{/* Shown beside the username field after it loses focus. */}}
 {{define "username_status"}}{{if eq .State "free"}}<span class="status-ok" role="img" aria-label="Потребителското име е свободно">✓</span>{{else if eq .State "taken"}}<span class="status-bad" role="img" aria-label="Потребителското име е заето">✗</span><span class="status-bad-text">Вече съществува потребител с това име</span>{{else if eq .State "invalid"}}<span class="status-bad-text">Само латински букви и цифри, 5–20 символа</span>{{else}}<span class="muted">Проверката не е възможна в момента</span>{{end}}{{end}}
+
+{{/* The transport field; reloaded by htmx when the serving store changes. */}}
+{{define "transport_field"}}
+<label for="pf-transport">Транспорт</label>
+{{if .Transports}}
+<select id="pf-transport" name="transport" required>
+  <option value="">— изберете —</option>
+  {{range .Transports}}
+  <option value="{{.}}" {{if eq $.Selected .}}selected{{end}}>{{.}}</option>
+  {{end}}
+</select>
+{{else}}
+<select id="pf-transport" disabled><option>{{if .NoStore}}Изберете обслужващ обект{{else}}Няма налични опции{{end}}</option></select>
+{{if .TransportsUnavailable}}<p class="hint">Опциите за транспорт не могат да бъдат заредени в момента.</p>{{end}}
+{{end}}
+{{end}}

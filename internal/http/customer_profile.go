@@ -42,6 +42,8 @@ func validLatinAlnum(s string, min, max int) bool {
 // profileSubmission is what the user typed, carried back when the form is
 // rejected.
 type profileSubmission struct {
+	// Store is the MANDANT_ID of the serving store the user picked.
+	Store     string
 	Username  string
 	Password  string
 	Transport string
@@ -52,10 +54,11 @@ type profileSubmission struct {
 type profileFormView struct {
 	CSRF     string
 	Customer external.Customer
-	// StoreName is the customer's serving store; it is fixed, not chosen.
-	StoreName string
-	// Transports are the options of the customer's serving store; none means
-	// the field is not applicable.
+	// Stores are the sender's own stores, one of which is picked as the serving
+	// store. None is selected at first.
+	Stores []store.Store
+	// Transports are the options of the picked serving store; none means the
+	// field is not applicable.
 	Transports      []string
 	SubmitterName   string
 	SubmitterStores string
@@ -67,27 +70,14 @@ type profileFormView struct {
 	TransportsUnavailable bool
 }
 
-// buildProfileForm gathers what the form offers: the customer's serving store
-// (fixed), the transports of that store, and the sender's details.
-func (a *App) buildProfileForm(r *http.Request, customer external.Customer) (profileFormView, error) {
+// buildProfileForm gathers what the form offers: the sender's stores to pick
+// the serving store from, and the sender's details. Transports are loaded once
+// a store is picked.
+func (a *App) buildProfileForm(r *http.Request, customer external.Customer) profileFormView {
 	ctx := r.Context()
 	u := userFrom(ctx)
 
-	f := profileFormView{CSRF: csrfFrom(ctx), Customer: customer, StoreName: strings.TrimSpace(customer.Mandant)}
-
-	stores, err := a.DB.ListStores(ctx, false)
-	if err != nil {
-		return f, err
-	}
-
-	// The serving store (its MANDANT_NAME) is one of the stores kept here; that
-	// record supplies the MANDANT_ID the transports are looked up by.
-	for _, s := range stores {
-		if f.StoreName != "" && strings.EqualFold(strings.TrimSpace(s.Name), f.StoreName) && s.MandantID != "" {
-			f.Transports, f.TransportsUnavailable = a.transportsByMandant(ctx, s.MandantID)
-			break
-		}
-	}
+	f := profileFormView{CSRF: csrfFrom(ctx), Customer: customer, Stores: u.Stores}
 
 	f.SubmitterName = u.Name
 	if f.SubmitterName == "" {
@@ -99,7 +89,54 @@ func (a *App) buildProfileForm(r *http.Request, customer external.Customer) (pro
 	}
 	f.SubmitterStores = strings.Join(names, ", ")
 	f.SubmitterStoreNames = names
-	return f, nil
+	return f
+}
+
+// TransportView is the transport field as the form shows it.
+func (f profileFormView) TransportView() transportSelectView {
+	return transportSelectView{
+		Transports:            f.Transports,
+		Selected:              f.Submitted.Transport,
+		TransportsUnavailable: f.TransportsUnavailable,
+		NoStore:               f.Submitted.Store == "",
+	}
+}
+
+// userStore returns the user's store with the given MANDANT_ID, if assigned.
+func userStore(u *store.User, mandantID string) (store.Store, bool) {
+	mandantID = strings.TrimSpace(mandantID)
+	if mandantID == "" {
+		return store.Store{}, false
+	}
+	for _, s := range u.Stores {
+		if strings.EqualFold(strings.TrimSpace(s.MandantID), mandantID) {
+			return s, true
+		}
+	}
+	return store.Store{}, false
+}
+
+// transportSelectView drives the transport field, which is reloaded whenever the
+// serving store changes.
+type transportSelectView struct {
+	Transports            []string
+	Selected              string
+	TransportsUnavailable bool
+	// NoStore is set while no serving store is picked.
+	NoStore bool
+}
+
+// handleProfileTransports serves the transport field for the picked serving
+// store. Only the user's own stores are accepted.
+func (a *App) handleProfileTransports(w http.ResponseWriter, r *http.Request) {
+	v := transportSelectView{NoStore: true}
+	if st, ok := userStore(userFrom(r.Context()), r.URL.Query().Get("store")); ok {
+		v.NoStore = false
+		v.Transports, v.TransportsUnavailable = a.transportsByMandant(r.Context(), st.MandantID)
+	}
+	if err := a.render.renderPartial(w, http.StatusOK, "customer/info_detail", "transport_field", v); err != nil {
+		a.serverError(w, r, err)
+	}
 }
 
 // transportsByMandant reads the transport options of a store from the external
@@ -136,13 +173,10 @@ func (a *App) handleProfileRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	form, err := a.buildProfileForm(r, *customer)
-	if err != nil {
-		a.serverError(w, r, err)
-		return
-	}
+	form := a.buildProfileForm(r, *customer)
 
 	sub := profileSubmission{
+		Store:     strings.TrimSpace(r.PostFormValue("store")),
 		Username:  strings.TrimSpace(r.PostFormValue("username")),
 		Password:  r.PostFormValue("password"),
 		Transport: strings.TrimSpace(r.PostFormValue("transport")),
@@ -151,10 +185,15 @@ func (a *App) handleProfileRequest(w http.ResponseWriter, r *http.Request) {
 
 	var errs []string
 
-	// The serving store is the customer's own, never taken from the form.
-	storeName := form.StoreName
-	if storeName == "" {
-		errs = append(errs, "Клиентът няма обслужващ обект.")
+	// The serving store must be one of the sender's own stores; the transports
+	// are looked up from it here, not taken from the form.
+	var storeName string
+	if st, ok := userStore(u, sub.Store); ok {
+		storeName = st.Name
+		sub.Store = st.MandantID
+		form.Transports, form.TransportsUnavailable = a.transportsByMandant(ctx, st.MandantID)
+	} else {
+		errs = append(errs, "Изберете обслужващ обект.")
 	}
 
 	validName := validLatinAlnum(sub.Username, usernameMin, usernameMax)

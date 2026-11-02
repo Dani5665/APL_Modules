@@ -27,28 +27,32 @@ func TestClientSearchListsTheStoresClients(t *testing.T) {
 	assertContains(t, rec, `hx-get="/clients/search"`)
 	assertNotContains(t, rec, sofia.Name)
 
-	rec = s.get("/clients/search")
-	assertStatus(t, rec, http.StatusOK)
-	assertContains(t, rec, sofia.Name, "/clients/"+sofia.Code)
-	assertNotContains(t, rec, varna.Name)
+	// Nothing is listed until at least 3 characters are typed.
+	for _, q := range []string{"", "ба"} {
+		rec = s.get("/clients/search?q=" + url.QueryEscape(q))
+		assertStatus(t, rec, http.StatusOK)
+		assertContains(t, rec, "Въведете поне 3 символа")
+		assertNotContains(t, rec, sofia.Name)
+	}
 
 	rec = s.get("/clients/search?q=" + url.QueryEscape(strings.ToUpper(sofia.Name)))
 	assertStatus(t, rec, http.StatusOK)
-	assertContains(t, rec, sofia.Name)
+	assertContains(t, rec, sofia.Name, "/clients/"+sofia.Code)
+	assertNotContains(t, rec, varna.Name)
 
 	rec = s.get("/clients/search?q=" + url.QueryEscape("няма-такъв-клиент"))
 	assertStatus(t, rec, http.StatusOK)
 	assertContains(t, rec, "Няма намерени клиенти по това търсене.")
 }
 
-func TestHomeKeepsTheSearchAndPageInTheLoadURL(t *testing.T) {
+func TestHomeKeepsTheSearchInTheLoadURL(t *testing.T) {
 	h := newHarness(t)
 	email, _ := sofiaSetup(t, h)
 	s := h.loginUser(email)
 
-	rec := s.get("/?q=" + url.QueryEscape("балкан") + "&page=2")
+	rec := s.get("/?q=" + url.QueryEscape("балкан") + "")
 	assertStatus(t, rec, http.StatusOK)
-	assertContains(t, rec, `value="балкан"`, `hx-get="/clients/search?page=2&amp;q=`)
+	assertContains(t, rec, `value="балкан"`, `hx-get="/clients/search?q=`)
 }
 
 func TestClientPageShowsTheClientAndTheRequestForm(t *testing.T) {

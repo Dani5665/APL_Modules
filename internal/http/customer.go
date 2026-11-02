@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"haynesproform/internal/audit"
 	"haynesproform/internal/auth"
@@ -130,8 +131,17 @@ func (a *App) handleUserLogout(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/login", http.StatusSeeOther)
 }
 
-// clientSearchPageSize is how many clients one page of search results holds.
+// clientSearchPageSize is how many clients each load of the client list adds;
+// the list scrolls infinitely, fetching the next batch as the end comes into view.
 const clientSearchPageSize = 50
+
+// minSearchLen is how many characters a search needs before any list is loaded.
+const minSearchLen = 3
+
+// searchTooShort reports whether the search is too short to load a list.
+func searchTooShort(search string) bool {
+	return utf8.RuneCountInString(search) < minSearchLen
+}
 
 type homeView struct {
 	view
@@ -141,6 +151,9 @@ type homeView struct {
 	// LoadURL is where the page fetches its results from.
 	LoadURL     string
 	Unavailable bool
+	// TooShort is set when the search is shorter than minSearchLen, so nothing
+	// is loaded yet.
+	TooShort bool
 }
 
 // handleHome shows the search over the clients of the user's stores. The list
@@ -155,9 +168,6 @@ func (a *App) handleHome(w http.ResponseWriter, r *http.Request) {
 	q := url.Values{}
 	if v.Search != "" {
 		q.Set("q", v.Search)
-	}
-	if p := pageParam(r); p > 1 {
-		q.Set("page", strconv.Itoa(p))
 	}
 	v.LoadURL = "/clients/search"
 	if len(q) > 0 {
@@ -181,8 +191,9 @@ func (a *App) handleClientSearch(w http.ResponseWriter, r *http.Request) {
 		Query:    map[string]string{"q": search},
 	}
 
-	all, err := a.Directory.ListClientsByStores(r.Context(), u.StoreMandantIDs())
-	if err != nil {
+	if searchTooShort(search) {
+		v.TooShort = true
+	} else if all, err := a.Directory.ListClientsByStores(r.Context(), u.StoreMandantIDs()); err != nil {
 		a.Log.Error("clients could not be loaded from the external directory", "error", err)
 		v.Unavailable = true
 	} else {
@@ -193,7 +204,12 @@ func (a *App) handleClientSearch(w http.ResponseWriter, r *http.Request) {
 		v.Clients = matches[from:to]
 	}
 
-	if err := a.render.renderPartial(w, http.StatusOK, "customer/home", "client_results", v); err != nil {
+	// Later batches are only the extra rows; the first is the whole list.
+	fragment := "client_results"
+	if v.ClientPage.Page > 1 {
+		fragment = "client_more"
+	}
+	if err := a.render.renderPartial(w, http.StatusOK, "customer/home", fragment, v); err != nil {
 		a.serverError(w, r, err)
 	}
 }

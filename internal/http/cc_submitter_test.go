@@ -107,7 +107,7 @@ func TestProfileRequestCopiesTheSubmitterWhenAsked(t *testing.T) {
 	s := h.loginUser(email)
 	client := h.firstMockClient(mock.StoreSofia)
 
-	assertStatus(t, s.post("/info/"+client.Code+"/profile-request", profileForm(sofia)), http.StatusOK)
+	assertStatus(t, s.post("/info/"+client.Code+"/profile-request", profileForm(mock.MandantSofia)), http.StatusOK)
 	if to, cc, n := ccOf(t, h, "profile_request_created"); n != 1 || to != "catalog@example.com" || cc != email {
 		t.Errorf("to=%q cc=%q n=%d; want To catalog and Cc %s", to, cc, n, email)
 	}

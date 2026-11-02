@@ -85,13 +85,13 @@ func TestEachRequestKindUsesItsOwnTemplateRecipients(t *testing.T) {
 	client := h.firstMockClient(mock.StoreSofia)
 
 	// No recipients on the profile template: the request is stored, no email.
-	assertStatus(t, s.post("/info/"+client.Code+"/profile-request", profileForm(sofia)), http.StatusOK)
+	assertStatus(t, s.post("/info/"+client.Code+"/profile-request", profileForm(mock.MandantSofia)), http.StatusOK)
 	if _, total, _ := h.db.ListOutbox(ctx, "", 10, 0); total != 0 {
 		t.Fatalf("%d emails queued, want none: the profile template has no recipients", total)
 	}
 
 	h.setTemplateRecipients("profile_request_created", "catalog-admins@example.com")
-	form := profileForm(sofia)
+	form := profileForm(mock.MandantSofia)
 	form.Set("username", "seconduser1")
 	assertStatus(t, s.post("/info/"+client.Code+"/profile-request", form), http.StatusOK)
 	assertStatus(t, s.post("/clients/"+client.Code+"/request", submitForm(h, client.Code)), http.StatusOK)

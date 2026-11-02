@@ -33,7 +33,9 @@
 
 {{define "info_results"}}
 <div id="info-results">
-  {{if .Unavailable}}
+  {{if .TooShort}}
+  <p class="empty">Въведете поне 3 символа, за да се зареди списъкът с клиенти.</p>
+  {{else if .Unavailable}}
   <div class="alert alert-error" role="alert">
     Списъкът с клиенти не може да бъде зареден в момента. Опитайте отново по-късно.
   </div>
